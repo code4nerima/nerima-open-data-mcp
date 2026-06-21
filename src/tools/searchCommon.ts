@@ -27,6 +27,10 @@ export function searchRecords<T>(
 }
 
 export function asToolResponse<T>(result: SearchResult<T>) {
+  return asJsonToolResponse(result);
+}
+
+export function asJsonToolResponse<T extends Record<string, unknown>>(result: T) {
   const text = JSON.stringify(result, null, 2);
 
   return {

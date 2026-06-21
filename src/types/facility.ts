@@ -27,6 +27,8 @@ export interface Shelter {
   latitude: NullableNumber;
   longitude: NullableNumber;
   targetDisasters: string;
+  capacity: NullableNumber;
+  capacityText: string;
   notes: string;
 }
 

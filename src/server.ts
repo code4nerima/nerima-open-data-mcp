@@ -6,11 +6,13 @@ import { getCacheStore } from "./data/cacheStore.js";
 import { clearDataSetCache, loadDataSets, loadOpenDataManifest } from "./data/loader.js";
 import { importOpenData } from "./data/openDataImport.js";
 import { searchAed } from "./tools/searchAed.js";
-import { asToolResponse } from "./tools/searchCommon.js";
+import { asJsonToolResponse, asToolResponse } from "./tools/searchCommon.js";
 import { searchFacilities } from "./tools/searchFacilities.js";
 import { searchOpenDataFromStore } from "./tools/searchOpenData.js";
 import { searchParks } from "./tools/searchParks.js";
 import { searchShelters } from "./tools/searchShelters.js";
+import { listShelters } from "./tools/listShelters.js";
+import { getDatasetStats } from "./tools/getDatasetStats.js";
 
 const optionalLimit = z
   .number()
@@ -37,6 +39,14 @@ const openDataSearchSchema = {
   keyword: z.string().optional().describe("Partial text to search across all cached CSV rows."),
   category: z.string().optional().describe("Dataset category partial match."),
   dataset: z.string().optional().describe("Dataset title, summary, or keyword partial match."),
+  limit: optionalLimit
+};
+
+const listSheltersSchema = {
+  area: z.string().optional().describe("Address or area partial match."),
+  disasterType: z.string().optional().describe("Disaster type partial match, such as 洪水 or 地震."),
+  sortBy: z.enum(["name", "capacity"]).optional().describe("Sort field. Defaults to capacity."),
+  sortOrder: z.enum(["asc", "desc"]).optional().describe("Sort order. Defaults to desc."),
   limit: optionalLimit
 };
 
@@ -106,6 +116,22 @@ export function createMcpServer(): McpServer {
   );
 
   server.registerTool(
+    "list_shelters",
+    {
+      title: "List Nerima Shelters",
+      description:
+        "List evacuation sites and disaster facilities with sorting by capacity or name.",
+      inputSchema: listSheltersSchema
+    },
+    async (args) => {
+      return runLoggedTool("list_shelters", args, async () => {
+        const data = await loadDataSets();
+        return asToolResponse(listShelters(data.shelters, args));
+      });
+    }
+  );
+
+  server.registerTool(
     "search_parks",
     {
       title: "Search Nerima Parks",
@@ -132,6 +158,22 @@ export function createMcpServer(): McpServer {
       return runLoggedTool("search_open_data", args, async () => {
         const manifest = await loadOpenDataManifest();
         return asToolResponse(await searchOpenDataFromStore(getCacheStore(), manifest, args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "get_dataset_stats",
+    {
+      title: "Get Nerima Open Data Stats",
+      description:
+        "Return dataset counts and shelter capacity statistics, including top 10 shelters by capacity.",
+      inputSchema: {}
+    },
+    async () => {
+      return runLoggedTool("get_dataset_stats", {}, async () => {
+        const [data, manifest] = await Promise.all([loadDataSets(), loadOpenDataManifest()]);
+        return asJsonToolResponse(getDatasetStats(data, manifest));
       });
     }
   );

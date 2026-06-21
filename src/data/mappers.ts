@@ -27,6 +27,15 @@ function disasterTypes(row: Record<string, string>): string {
   return types.join("、");
 }
 
+function capacityFromText(value: string | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const match = value.replace(/,/g, "").match(/\d+/);
+  return match ? Number(match[0]) : null;
+}
+
 export function mapFacilitiesFromCache(datasets: CachedDataSet[]): Facility[] {
   return rowsFor(datasets, "公共施設一覧").map((row) => ({
     name: row["名称"] ?? "",
@@ -61,7 +70,9 @@ export function mapSheltersFromCache(datasets: CachedDataSet[]): Shelter[] {
     latitude: numberOrNull(row["緯度"]),
     longitude: numberOrNull(row["経度"]),
     targetDisasters: disasterTypes(row),
-    notes: row["備考"] || row["想定収容人数"] || ""
+    capacity: capacityFromText(row["想定収容人数"]),
+    capacityText: row["想定収容人数"] ?? "",
+    notes: row["備考"] || ""
   }));
 
   const bases = rowsFor(datasets, "避難拠点").map((row) => ({
@@ -71,6 +82,8 @@ export function mapSheltersFromCache(datasets: CachedDataSet[]): Shelter[] {
     latitude: numberOrNull(row["緯度"]),
     longitude: numberOrNull(row["経度"]),
     targetDisasters: "地震等",
+    capacity: null,
+    capacityText: "",
     notes: row["備考"] ?? ""
   }));
 

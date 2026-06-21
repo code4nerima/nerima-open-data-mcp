@@ -35,6 +35,18 @@ AED設置場所を検索します。
 - `area?: string`
 - `limit?: number`
 
+### `list_shelters`
+
+避難所・防災関連施設を一覧表示します。収容人数順や名称順で並び替えできます。
+
+引数:
+
+- `area?: string`
+- `disasterType?: string`
+- `sortBy?: "name" | "capacity"`
+- `sortOrder?: "asc" | "desc"`
+- `limit?: number`
+
 ### `search_parks`
 
 公園を検索します。初期版では、公共施設一覧から公園相当データを抽出したJSONを使います。
@@ -55,6 +67,12 @@ AED設置場所を検索します。
 - `category?: string`
 - `dataset?: string`
 - `limit?: number`
+
+### `get_dataset_stats`
+
+GCSキャッシュと主要データセットの統計情報を返します。避難所については、指定緊急避難場所と避難拠点を合算した総件数、収容人数ありの件数、最大収容人数、収容人数上位10件を返します。
+
+引数はありません。
 
 ## ローカル起動
 
