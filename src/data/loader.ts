@@ -19,6 +19,7 @@ export interface OpenDataSets {
 
 let cache: OpenDataSets | null = null;
 let openDataCache: { manifest: OpenDataCacheManifest | null; datasets: CachedDataSet[] } | null = null;
+let manifestCache: OpenDataCacheManifest | null | undefined;
 
 async function readJson<T>(fileName: string): Promise<T> {
   const filePath = path.join(process.cwd(), "data", fileName);
@@ -31,7 +32,7 @@ export async function loadDataSets(): Promise<OpenDataSets> {
     return cache;
   }
 
-  const imported = await loadOpenDataCache();
+  const imported = await loadToolDataSets();
   const importedDataSets = {
     facilities: mapFacilitiesFromCache(imported.datasets),
     aed: mapAedFromCache(imported.datasets),
@@ -58,6 +59,16 @@ export async function loadDataSets(): Promise<OpenDataSets> {
 export function clearDataSetCache(): void {
   cache = null;
   openDataCache = null;
+  manifestCache = undefined;
+}
+
+export async function loadOpenDataManifest(): Promise<OpenDataCacheManifest | null> {
+  if (manifestCache !== undefined) {
+    return manifestCache;
+  }
+
+  manifestCache = await getCacheStore().readManifest();
+  return manifestCache;
 }
 
 export async function loadOpenDataCache(): Promise<{
@@ -75,4 +86,30 @@ export async function loadOpenDataCache(): Promise<{
   };
 
   return openDataCache;
+}
+
+const TOOL_DATASET_TITLES = [
+  "公共施設一覧",
+  "AED設置箇所一覧",
+  "指定緊急避難場所一覧",
+  "避難拠点",
+  "公園トイレ一覧"
+];
+
+async function loadToolDataSets(): Promise<{
+  manifest: OpenDataCacheManifest | null;
+  datasets: CachedDataSet[];
+}> {
+  const manifest = await loadOpenDataManifest();
+  if (!manifest) {
+    return { manifest: null, datasets: [] };
+  }
+
+  const cacheStore = getCacheStore();
+  const targets = manifest.datasets.filter((dataset) => TOOL_DATASET_TITLES.includes(dataset.title));
+  const datasets = (
+    await Promise.all(targets.map((dataset) => cacheStore.readDataSet(dataset.path)))
+  ).filter((dataset): dataset is CachedDataSet => Boolean(dataset));
+
+  return { manifest, datasets };
 }

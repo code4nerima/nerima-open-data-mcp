@@ -128,19 +128,38 @@ export function createGcsCacheStore(): CacheStore {
       }
     },
 
+    async readDataSet(relativePath: string): Promise<CachedDataSet | null> {
+      if (!bucketName) {
+        return null;
+      }
+
+      const storage = createStorage();
+      const file = storage.bucket(bucketName).file(objectName(prefix, relativePath));
+
+      try {
+        const [content] = await file.download();
+        return JSON.parse(content.toString("utf8")) as CachedDataSet;
+      } catch (error) {
+        if ((error as { code?: number }).code === 404) {
+          return null;
+        }
+        throw error;
+      }
+    },
+
     async readAllDataSets(): Promise<CachedDataSet[]> {
       const manifest = await this.readManifest();
       if (!manifest || !bucketName) {
         return [];
       }
 
-      const storage = createStorage();
-      const bucket = storage.bucket(bucketName);
-
       return Promise.all(
         manifest.datasets.map(async (dataset) => {
-          const [content] = await bucket.file(objectName(prefix, dataset.path)).download();
-          return JSON.parse(content.toString("utf8")) as CachedDataSet;
+          const cachedDataSet = await this.readDataSet(dataset.path);
+          if (!cachedDataSet) {
+            throw new Error(`Cached dataset not found: ${dataset.path}`);
+          }
+          return cachedDataSet;
         })
       );
     }

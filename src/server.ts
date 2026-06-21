@@ -2,12 +2,13 @@ import express, { type Request, type Response } from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
-import { clearDataSetCache, loadDataSets, loadOpenDataCache } from "./data/loader.js";
+import { getCacheStore } from "./data/cacheStore.js";
+import { clearDataSetCache, loadDataSets, loadOpenDataManifest } from "./data/loader.js";
 import { importOpenData } from "./data/openDataImport.js";
 import { searchAed } from "./tools/searchAed.js";
 import { asToolResponse } from "./tools/searchCommon.js";
 import { searchFacilities } from "./tools/searchFacilities.js";
-import { searchOpenData } from "./tools/searchOpenData.js";
+import { searchOpenDataFromStore } from "./tools/searchOpenData.js";
 import { searchParks } from "./tools/searchParks.js";
 import { searchShelters } from "./tools/searchShelters.js";
 
@@ -39,6 +40,20 @@ const openDataSearchSchema = {
   limit: optionalLimit
 };
 
+async function runLoggedTool<T>(name: string, args: unknown, handler: () => Promise<T>): Promise<T> {
+  const startedAt = Date.now();
+  console.log(`MCP tool ${name} started`, JSON.stringify(args));
+
+  try {
+    const result = await handler();
+    console.log(`MCP tool ${name} completed in ${Date.now() - startedAt}ms`);
+    return result;
+  } catch (error) {
+    console.error(`MCP tool ${name} failed after ${Date.now() - startedAt}ms`, error);
+    throw error;
+  }
+}
+
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: "nerima-open-data-mcp",
@@ -53,8 +68,10 @@ export function createMcpServer(): McpServer {
       inputSchema: facilitySearchSchema
     },
     async (args) => {
-      const data = await loadDataSets();
-      return asToolResponse(searchFacilities(data.facilities, args));
+      return runLoggedTool("search_facilities", args, async () => {
+        const data = await loadDataSets();
+        return asToolResponse(searchFacilities(data.facilities, args));
+      });
     }
   );
 
@@ -66,8 +83,10 @@ export function createMcpServer(): McpServer {
       inputSchema: basicSearchSchema
     },
     async (args) => {
-      const data = await loadDataSets();
-      return asToolResponse(searchAed(data.aed, args));
+      return runLoggedTool("search_aed", args, async () => {
+        const data = await loadDataSets();
+        return asToolResponse(searchAed(data.aed, args));
+      });
     }
   );
 
@@ -79,8 +98,10 @@ export function createMcpServer(): McpServer {
       inputSchema: basicSearchSchema
     },
     async (args) => {
-      const data = await loadDataSets();
-      return asToolResponse(searchShelters(data.shelters, args));
+      return runLoggedTool("search_shelters", args, async () => {
+        const data = await loadDataSets();
+        return asToolResponse(searchShelters(data.shelters, args));
+      });
     }
   );
 
@@ -92,8 +113,10 @@ export function createMcpServer(): McpServer {
       inputSchema: basicSearchSchema
     },
     async (args) => {
-      const data = await loadDataSets();
-      return asToolResponse(searchParks(data.parks, args));
+      return runLoggedTool("search_parks", args, async () => {
+        const data = await loadDataSets();
+        return asToolResponse(searchParks(data.parks, args));
+      });
     }
   );
 
@@ -106,8 +129,10 @@ export function createMcpServer(): McpServer {
       inputSchema: openDataSearchSchema
     },
     async (args) => {
-      const cache = await loadOpenDataCache();
-      return asToolResponse(searchOpenData(cache.datasets, args));
+      return runLoggedTool("search_open_data", args, async () => {
+        const manifest = await loadOpenDataManifest();
+        return asToolResponse(await searchOpenDataFromStore(getCacheStore(), manifest, args));
+      });
     }
   );
 
@@ -128,11 +153,11 @@ export function createApp(): express.Express {
 
   app.get("/open-data/cache", async (_req, res, next) => {
     try {
-      const cache = await loadOpenDataCache();
+      const manifest = await loadOpenDataManifest();
       res.json({
         ok: true,
-        manifest: cache.manifest,
-        loadedDatasetCount: cache.datasets.length
+        manifest,
+        loadedDatasetCount: manifest?.datasetCount ?? 0
       });
     } catch (error) {
       next(error);
@@ -221,8 +246,8 @@ export async function importOpenDataIfConfigured(): Promise<void> {
     return;
   }
 
-  const cache = await loadOpenDataCache();
-  if (cache.manifest && cache.datasets.length > 0) {
+  const manifest = await loadOpenDataManifest();
+  if (manifest) {
     return;
   }
 

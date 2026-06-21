@@ -6,6 +6,7 @@ export interface CacheStore {
   writeDataSet(fileName: string, dataSet: CachedDataSet): Promise<string>;
   writeManifest(manifest: OpenDataCacheManifest): Promise<void>;
   readManifest(): Promise<OpenDataCacheManifest | null>;
+  readDataSet(relativePath: string): Promise<CachedDataSet | null>;
   readAllDataSets(): Promise<CachedDataSet[]>;
 }
 
