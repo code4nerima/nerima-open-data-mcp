@@ -16,14 +16,20 @@ function createStorage(): Storage {
   const credentialsBase64 = process.env.GOOGLE_APPLICATION_CREDENTIALS_BASE64;
 
   if (credentialsJson) {
+    const credentials = JSON.parse(credentialsJson) as { project_id?: string };
     return new Storage({
-      credentials: JSON.parse(credentialsJson) as object
+      credentials,
+      projectId: credentials.project_id
     });
   }
 
   if (credentialsBase64) {
+    const credentials = JSON.parse(Buffer.from(credentialsBase64, "base64").toString("utf8")) as {
+      project_id?: string;
+    };
     return new Storage({
-      credentials: JSON.parse(Buffer.from(credentialsBase64, "base64").toString("utf8")) as object
+      credentials,
+      projectId: credentials.project_id
     });
   }
 
