@@ -1,6 +1,13 @@
 import { Storage, type UploadOptions } from "@google-cloud/storage";
+import { GoogleAuth } from "google-auth-library";
 import type { CachedDataSet, OpenDataCacheManifest } from "../../types/openData.js";
 import type { CacheStore } from "../cacheStore.js";
+
+const STORAGE_SCOPES = [
+  "https://www.googleapis.com/auth/iam",
+  "https://www.googleapis.com/auth/cloud-platform",
+  "https://www.googleapis.com/auth/devstorage.full_control"
+];
 
 function normalizePrefix(prefix: string): string {
   return prefix.replace(/^\/+|\/+$/g, "");
@@ -17,8 +24,15 @@ function createStorage(): Storage {
 
   if (credentialsJson) {
     const credentials = JSON.parse(credentialsJson) as { project_id?: string };
-    return new Storage({
+    const authClient = new GoogleAuth({
       credentials,
+      projectId: credentials.project_id,
+      scopes: STORAGE_SCOPES
+    });
+    authClient.useJWTAccessWithScope = true;
+
+    return new Storage({
+      authClient,
       projectId: credentials.project_id
     });
   }
@@ -27,8 +41,15 @@ function createStorage(): Storage {
     const credentials = JSON.parse(Buffer.from(credentialsBase64, "base64").toString("utf8")) as {
       project_id?: string;
     };
-    return new Storage({
+    const authClient = new GoogleAuth({
       credentials,
+      projectId: credentials.project_id,
+      scopes: STORAGE_SCOPES
+    });
+    authClient.useJWTAccessWithScope = true;
+
+    return new Storage({
+      authClient,
       projectId: credentials.project_id
     });
   }
