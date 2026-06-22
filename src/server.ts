@@ -185,6 +185,16 @@ export function createApp(): express.Express {
   const app = express();
   app.use(express.json({ limit: "1mb" }));
 
+  const setMcpCorsHeaders = (res: Response) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Accept, Authorization, MCP-Protocol-Version, MCP-Session-Id"
+    );
+    res.setHeader("Access-Control-Expose-Headers", "MCP-Session-Id");
+  };
+
   app.get("/health", (_req, res) => {
     res.json({
       ok: true,
@@ -237,7 +247,14 @@ export function createApp(): express.Express {
     }
   });
 
+  app.options("/mcp", (_req: Request, res: Response) => {
+    setMcpCorsHeaders(res);
+    res.status(204).end();
+  });
+
   app.post("/mcp", async (req: Request, res: Response) => {
+    setMcpCorsHeaders(res);
+
     const server = createMcpServer();
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined

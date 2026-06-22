@@ -17,4 +17,18 @@ describe("HTTP server", () => {
 
     expect(response.body.error.message).toBe("Method not allowed.");
   });
+
+  it("handles MCP CORS preflight requests", async () => {
+    const response = await request(createApp())
+      .options("/mcp")
+      .set("Origin", "https://example.com")
+      .set("Access-Control-Request-Method", "POST")
+      .set("Access-Control-Request-Headers", "content-type,mcp-protocol-version")
+      .expect(204);
+
+    expect(response.headers["access-control-allow-origin"]).toBe("*");
+    expect(response.headers["access-control-allow-methods"]).toContain("POST");
+    expect(response.headers["access-control-allow-headers"]).toContain("MCP-Protocol-Version");
+    expect(response.headers["access-control-expose-headers"]).toContain("MCP-Session-Id");
+  });
 });

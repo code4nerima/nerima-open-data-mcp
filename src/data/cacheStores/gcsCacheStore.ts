@@ -8,6 +8,7 @@ const STORAGE_SCOPES = [
   "https://www.googleapis.com/auth/cloud-platform",
   "https://www.googleapis.com/auth/devstorage.full_control"
 ];
+const SIGNED_URL_EXPIRATION_MS = 10 * 60 * 1000;
 
 function normalizePrefix(prefix: string): string {
   return prefix.replace(/^\/+|\/+$/g, "");
@@ -57,6 +58,61 @@ function createStorage(): Storage {
   return new Storage();
 }
 
+function isRetryableStorageError(error: unknown): boolean {
+  const err = error as { code?: string | number; message?: string };
+  const message = err.message ?? "";
+
+  return (
+    err.code === "ERR_STREAM_PREMATURE_CLOSE" ||
+    err.code === "ECONNRESET" ||
+    err.code === "ETIMEDOUT" ||
+    err.code === "EAI_AGAIN" ||
+    message.includes("Premature close") ||
+    message.includes("oauth2/v4/token")
+  );
+}
+
+async function getSignedUrl(
+  bucketName: string,
+  prefix: string,
+  relativePath: string,
+  action: "read" | "write" | "delete",
+  contentType?: string
+): Promise<string> {
+  const storage = createStorage();
+  const file = storage.bucket(bucketName).file(objectName(prefix, relativePath));
+  const [url] = await file.getSignedUrl({
+    version: "v4",
+    action,
+    expires: Date.now() + SIGNED_URL_EXPIRATION_MS,
+    contentType
+  });
+  return url;
+}
+
+async function uploadJsonWithSignedUrl(
+  bucketName: string,
+  prefix: string,
+  relativePath: string,
+  value: unknown
+): Promise<void> {
+  const contentType = "application/json; charset=utf-8";
+  const url = await getSignedUrl(bucketName, prefix, relativePath, "write", contentType);
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "Content-Type": contentType
+    },
+    body: JSON.stringify(value, null, 2)
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Signed GCS upload failed for ${relativePath}: ${response.status} ${response.statusText}`
+    );
+  }
+}
+
 async function uploadJson(
   bucketName: string,
   prefix: string,
@@ -73,7 +129,70 @@ async function uploadJson(
     }
   };
 
-  await file.save(JSON.stringify(value, null, 2), options);
+  try {
+    await file.save(JSON.stringify(value, null, 2), options);
+  } catch (error) {
+    if (!isRetryableStorageError(error)) {
+      throw error;
+    }
+    await uploadJsonWithSignedUrl(bucketName, prefix, relativePath, value);
+  }
+}
+
+async function readJsonWithSignedUrl<T>(
+  bucketName: string,
+  prefix: string,
+  relativePath: string
+): Promise<T | null> {
+  const url = await getSignedUrl(bucketName, prefix, relativePath, "read");
+  const response = await fetch(url);
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Signed GCS download failed for ${relativePath}: ${response.status} ${response.statusText}`
+    );
+  }
+
+  return (await response.json()) as T;
+}
+
+async function deleteObjectWithSignedUrl(
+  bucketName: string,
+  prefix: string,
+  relativePath: string
+): Promise<void> {
+  const url = await getSignedUrl(bucketName, prefix, relativePath, "delete");
+  const response = await fetch(url, { method: "DELETE" });
+
+  if (response.status === 404) {
+    return;
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `Signed GCS delete failed for ${relativePath}: ${response.status} ${response.statusText}`
+    );
+  }
+}
+
+async function resetWithSignedUrls(bucketName: string, prefix: string): Promise<void> {
+  const manifest = await readJsonWithSignedUrl<OpenDataCacheManifest>(
+    bucketName,
+    prefix,
+    "catalog.json"
+  );
+
+  if (manifest) {
+    await Promise.all(
+      manifest.datasets.map((dataset) => deleteObjectWithSignedUrl(bucketName, prefix, dataset.path))
+    );
+  }
+
+  await deleteObjectWithSignedUrl(bucketName, prefix, "catalog.json");
 }
 
 export function createGcsCacheStore(): CacheStore {
@@ -91,9 +210,16 @@ export function createGcsCacheStore(): CacheStore {
     async reset(): Promise<void> {
       const requiredBucketName = requireBucketName();
       const storage = createStorage();
-      await storage.bucket(requiredBucketName).deleteFiles({
-        prefix: objectName(prefix, "")
-      });
+      try {
+        await storage.bucket(requiredBucketName).deleteFiles({
+          prefix: objectName(prefix, "")
+        });
+      } catch (error) {
+        if (!isRetryableStorageError(error)) {
+          throw error;
+        }
+        await resetWithSignedUrls(requiredBucketName, prefix);
+      }
     },
 
     async writeDataSet(fileName: string, dataSet: CachedDataSet): Promise<string> {
@@ -124,6 +250,9 @@ export function createGcsCacheStore(): CacheStore {
         if ((error as { code?: number }).code === 404) {
           return null;
         }
+        if (isRetryableStorageError(error)) {
+          return readJsonWithSignedUrl<OpenDataCacheManifest>(bucketName, prefix, "catalog.json");
+        }
         throw error;
       }
     },
@@ -142,6 +271,9 @@ export function createGcsCacheStore(): CacheStore {
       } catch (error) {
         if ((error as { code?: number }).code === 404) {
           return null;
+        }
+        if (isRetryableStorageError(error)) {
+          return readJsonWithSignedUrl<CachedDataSet>(bucketName, prefix, relativePath);
         }
         throw error;
       }

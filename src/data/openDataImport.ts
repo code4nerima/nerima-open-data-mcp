@@ -12,9 +12,19 @@ export const NERIMA_OPEN_DATA_LIST_URL = new URL(
 
 const CSV_LINK_PATTERN = /<a\b[^>]*href=["']([^"']+\.csv(?:\?[^"']*)?)["'][^>]*>(.*?)<\/a>/gis;
 const PAGE_LINK_PATTERN = /<a\b[^>]*href=["']([^"']+\.html(?:\?[^"']*)?)["'][^>]*>(.*?)<\/a>/gis;
+const OPEN_DATA_PAGE_PREFIX = new URL(NERIMA_OPEN_DATA_BASE_URL).pathname;
 
 function stripHtml(value: string): string {
-  return value.replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  return value
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function slugify(value: string): string {
@@ -47,6 +57,26 @@ function toCatalogRow(row: Record<string, string>): CatalogRow {
     fileFormats: row["ファイル形式"] ?? "",
     license: row["ファイル_ライセンス"] ?? "",
     status: row["ファイル_ステータス"] ?? ""
+  };
+}
+
+function catalogRowFromPage(pageUrl: string, pageHtml: string, fallbackCategory = ""): CatalogRow {
+  const metadata = extractMetadata(pageHtml);
+  const title = metadata["タイトル"] || extractTitle(pageHtml) || path.basename(pageUrl, ".html");
+
+  return {
+    id: `page-${slugify(new URL(pageUrl).pathname)}`,
+    title,
+    summary: metadata["データの内容"] ?? "",
+    keywords: metadata["タグ"] ?? "",
+    category: metadata["カテゴリ"] || fallbackCategory,
+    pageUrl,
+    updateFrequency: metadata["更新頻度"] ?? "",
+    publishedAt: metadata["初回公開日"] ?? "",
+    updatedAt: metadata["最終更新日"] || extractUpdatedAt(pageHtml),
+    fileFormats: "csv",
+    license: metadata["利用ルール"] ?? "CC-BY",
+    status: "配信中"
   };
 }
 
@@ -94,6 +124,81 @@ function extractPageLinks(pageHtml: string, pageUrl: string): Array<{ title: str
   return [...links.values()];
 }
 
+function extractTitle(pageHtml: string): string {
+  const h1 = pageHtml.match(/<h1[^>]*>(.*?)<\/h1>/is)?.[1];
+  if (h1) {
+    return stripHtml(h1);
+  }
+
+  const title = pageHtml.match(/<title[^>]*>(.*?)<\/title>/is)?.[1];
+  return title ? stripHtml(title).replace(/：練馬区公式ホームページ$/, "") : "";
+}
+
+function extractUpdatedAt(pageHtml: string): string {
+  return stripHtml(pageHtml.match(/<p[^>]*class=["']update["'][^>]*>(.*?)<\/p>/is)?.[1] ?? "").replace(
+    /^更新日：/,
+    ""
+  );
+}
+
+function extractMetadata(pageHtml: string): Record<string, string> {
+  const metadata: Record<string, string> = {};
+  const rowPattern = /<tr[^>]*>\s*<th[^>]*>(.*?)<\/th>\s*<td[^>]*>(.*?)<\/td>\s*<\/tr>/gis;
+
+  for (const match of pageHtml.matchAll(rowPattern)) {
+    const key = stripHtml(match[1] ?? "");
+    const value = stripHtml(match[2] ?? "");
+    if (key) {
+      metadata[key] = value;
+    }
+  }
+
+  return metadata;
+}
+
+function isOpenDataHtmlPage(url: string): boolean {
+  const parsed = new URL(url);
+  return parsed.hostname === "www.city.nerima.tokyo.jp" && parsed.pathname.startsWith(OPEN_DATA_PAGE_PREFIX);
+}
+
+async function discoverCsvPagesFromCategories(): Promise<Map<string, CatalogRow>> {
+  const rootHtml = await fetchText(NERIMA_OPEN_DATA_BASE_URL);
+  const categoryLinks = extractPageLinks(rootHtml, NERIMA_OPEN_DATA_BASE_URL).filter((link) => {
+    const pathname = new URL(link.url).pathname;
+    return pathname.startsWith(OPEN_DATA_PAGE_PREFIX) && pathname.endsWith("/index.html");
+  });
+  const pages = new Map<string, CatalogRow>();
+
+  for (const categoryLink of categoryLinks) {
+    try {
+      const categoryHtml = await fetchText(categoryLink.url);
+      const pageLinks = extractPageLinks(categoryHtml, categoryLink.url).filter((link) => {
+        return isOpenDataHtmlPage(link.url) && !link.url.endsWith("/index.html");
+      });
+
+      for (const pageLink of pageLinks) {
+        if (pages.has(pageLink.url)) {
+          continue;
+        }
+
+        try {
+          const pageHtml = await fetchText(pageLink.url);
+          if (extractCsvLinks(pageHtml, pageLink.url).length === 0) {
+            continue;
+          }
+          pages.set(pageLink.url, catalogRowFromPage(pageLink.url, pageHtml, categoryLink.title));
+        } catch (error) {
+          console.warn(`Skipping discovered page ${pageLink.url}:`, error);
+        }
+      }
+    } catch (error) {
+      console.warn(`Skipping category page ${categoryLink.url}:`, error);
+    }
+  }
+
+  return pages;
+}
+
 async function resolveDataSetPageUrl(catalogRow: CatalogRow): Promise<string> {
   try {
     await fetchBuffer(catalogRow.pageUrl);
@@ -116,10 +221,20 @@ async function resolveDataSetPageUrl(catalogRow: CatalogRow): Promise<string> {
 
 export async function fetchCatalogRows(): Promise<CatalogRow[]> {
   const csvText = await fetchText(NERIMA_OPEN_DATA_LIST_URL);
-  return parseCsvRows(csvText)
+  const listedRows = parseCsvRows(csvText)
     .map(toCatalogRow)
     .filter((row) => row.id && row.pageUrl && hasCsvFormat(row.fileFormats))
     .filter((row) => !row.status || row.status === "配信中");
+  const rowsByUrl = new Map(listedRows.map((row) => [row.pageUrl, row]));
+  const discoveredRows = await discoverCsvPagesFromCategories();
+
+  for (const [pageUrl, row] of discoveredRows) {
+    if (!rowsByUrl.has(pageUrl)) {
+      rowsByUrl.set(pageUrl, row);
+    }
+  }
+
+  return [...rowsByUrl.values()];
 }
 
 async function fetchCsvFile(link: { title: string; url: string }): Promise<CachedCsvFile> {

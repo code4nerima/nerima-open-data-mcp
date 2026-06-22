@@ -172,14 +172,16 @@ curl -X POST \
 
 公式CSVキャッシュは取得時点の生成物なので、Gitには含めません。Herokuのslugにも含めず、GCSに保存します。
 
-インポート処理は、練馬区オープンデータサイトの「オープンデータ一覧（CSV）」を起点に、CSV形式の各データセットページを巡回してページ内のCSVリンクを取得します。取得したCSVはJSON化して、GCS上の `nerima-open-data/cache/datasets/*.json` に保存し、最後に `nerima-open-data/cache/catalog.json` を更新します。
+インポート処理は、練馬区オープンデータサイトの「オープンデータ一覧（CSV）」とカテゴリページを起点に、CSV形式で公開されている各データセットページを巡回してページ内のCSVリンクを取得します。取得したCSVはJSON化して、GCS上の `nerima-open-data/cache/datasets/*.json` に保存し、最後に `nerima-open-data/cache/catalog.json` を更新します。
 
-現在のキャッシュ生成結果:
+キャッシュ生成結果の例:
 
 - データセット数: 34
 - CSVファイル数: 531
 - 行数: 84,802
 - 生成JSONの合計サイズ目安: 約252MB
+
+公式サイトの更新により、対象データセット数や行数は変わります。インポート時点の正確な件数は `/open-data/cache` または `get_dataset_stats` で確認してください。
 
 専用toolは公式CSVキャッシュを優先し、キャッシュがない場合のみ `data/*.json` の少数サンプルにフォールバックします。GCSキャッシュは全件を一括ロードせず、manifestを起点に必要なデータセットだけ遅延読み込みします。
 
