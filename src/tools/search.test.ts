@@ -7,6 +7,7 @@ import type { GarbageCollectionArea, RssNewsItem } from "../types/openData.js";
 import { searchFacilities } from "./searchFacilities.js";
 import { searchGarbageCollection } from "./searchGarbageCollection.js";
 import { searchNews } from "./searchNews.js";
+import { searchOpenDataDataSets } from "./searchOpenData.js";
 import { searchProcedures } from "./searchProcedures.js";
 import { searchServiceCounters } from "./searchServiceCounters.js";
 
@@ -63,6 +64,66 @@ describe("searchFacilities", () => {
 
     expect(result.count).toBe(1);
     expect(result.results).toHaveLength(1);
+  });
+});
+
+describe("searchOpenDataDataSets", () => {
+  const manifest = {
+    generatedAt: "2026-06-22T00:00:00.000Z",
+    sourceCatalogUrl: "https://example.com/catalog.csv",
+    datasetCount: 3,
+    csvFileCount: 3,
+    totalRowCount: 120,
+    datasets: [
+      {
+        id: "0000000118",
+        title: "行政手続情報",
+        category: "統計・区政情報",
+        updatedAt: "2026-06-01",
+        path: "datasets/procedures.json",
+        csvFileCount: 1,
+        rowCount: 50
+      },
+      {
+        id: "0000000001",
+        title: "公共施設一覧",
+        category: "施設情報",
+        updatedAt: "2026-05-01",
+        path: "datasets/facilities.json",
+        csvFileCount: 1,
+        rowCount: 60
+      },
+      {
+        id: "0000000002",
+        title: "文化財一覧",
+        category: "文化・生涯学習",
+        updatedAt: "2026-04-01",
+        path: "datasets/culture.json",
+        csvFileCount: 1,
+        rowCount: 10
+      }
+    ]
+  };
+
+  it("searches dataset summaries by keyword", () => {
+    const result = searchOpenDataDataSets(manifest, { keyword: "行政手続" });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]).toMatchObject({
+      id: "0000000118",
+      title: "行政手続情報",
+      rowCount: 50
+    });
+  });
+
+  it("lists dataset summaries sorted by row count", () => {
+    const result = searchOpenDataDataSets(manifest, { sortBy: "rowCount", sortOrder: "desc" });
+
+    expect(result.results.map((dataset) => dataset.title)).toEqual([
+      "公共施設一覧",
+      "行政手続情報",
+      "文化財一覧"
+    ]);
   });
 });
 

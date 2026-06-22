@@ -68,6 +68,29 @@
 - `dataset?: string`
 - `limit?: number`
 
+### `search_open_data_datasets`
+
+練馬区オープンデータサイトから取り込んだデータセット一覧を検索します。練馬について調べるときに、人口、施設、防災、子育て、教育、文化財、行政手続、産業、まちづくりなど、どのデータセットが存在するか探す質問に向いています。
+
+引数:
+
+- `keyword?: string`
+- `category?: string`
+- `sortBy?: "title" | "rowCount" | "updatedAt"`
+- `sortOrder?: "asc" | "desc"`
+- `limit?: number`
+
+### `list_open_data_datasets`
+
+練馬区オープンデータサイトから取り込んだデータセット一覧を表示します。利用可能なデータ、カテゴリ別のデータ、行数が多いデータ、更新されたデータを把握したい質問に向いています。
+
+引数:
+
+- `category?: string`
+- `sortBy?: "title" | "rowCount" | "updatedAt"`
+- `sortOrder?: "asc" | "desc"`
+- `limit?: number`
+
 ### `search_news`
 
 練馬区公式サイトの新着情報RSSを検索します。

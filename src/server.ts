@@ -14,7 +14,11 @@ import { importOpenData } from "./data/openDataImport.js";
 import { searchAed } from "./tools/searchAed.js";
 import { asJsonToolResponse, asToolResponse } from "./tools/searchCommon.js";
 import { searchFacilities } from "./tools/searchFacilities.js";
-import { searchOpenDataFromStore } from "./tools/searchOpenData.js";
+import {
+  listOpenDataDataSets,
+  searchOpenDataDataSets,
+  searchOpenDataFromStore
+} from "./tools/searchOpenData.js";
 import { searchParks } from "./tools/searchParks.js";
 import { searchShelters } from "./tools/searchShelters.js";
 import { listShelters } from "./tools/listShelters.js";
@@ -66,6 +70,36 @@ const openDataSearchSchema = {
     .describe(
       "データセット名・概要・キーワードの部分一致。例: 行政手続情報、公共施設一覧、AED設置箇所一覧、指定緊急避難場所一覧、避難拠点、公園トイレ一覧。"
     ),
+  limit: optionalLimit
+};
+
+const openDataDataSetSearchSchema = {
+  keyword: z
+    .string()
+    .optional()
+    .describe("データセットID、タイトル、分類、更新日、保存パス、行数などの部分一致。例: 人口、文化財、行政手続、防災、子育て。"),
+  category: z
+    .string()
+    .optional()
+    .describe("オープンデータ分類の部分一致。例: 統計・区政情報、防災・安全安心、子育て・教育。"),
+  sortBy: z
+    .enum(["title", "rowCount", "updatedAt"])
+    .optional()
+    .describe("並び替え項目。titleはタイトル順、rowCountは行数順、updatedAtは更新日順。"),
+  sortOrder: z.enum(["asc", "desc"]).optional().describe("並び順。ascは昇順、descは降順。省略時はasc。"),
+  limit: optionalLimit
+};
+
+const openDataDataSetListSchema = {
+  category: z
+    .string()
+    .optional()
+    .describe("オープンデータ分類の部分一致。例: 統計・区政情報、防災・安全安心、子育て・教育。"),
+  sortBy: z
+    .enum(["title", "rowCount", "updatedAt"])
+    .optional()
+    .describe("並び替え項目。titleはタイトル順、rowCountは行数順、updatedAtは更新日順。"),
+  sortOrder: z.enum(["asc", "desc"]).optional().describe("並び順。ascは昇順、descは降順。省略時はasc。"),
   limit: optionalLimit
 };
 
@@ -246,6 +280,38 @@ export function createMcpServer(): McpServer {
       return runLoggedTool("search_open_data", args, async () => {
         const manifest = await loadOpenDataManifest();
         return asToolResponse(await searchOpenDataFromStore(getCacheStore(), manifest, args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "search_open_data_datasets",
+    {
+      title: "練馬区オープンデータのデータセットを検索",
+      description:
+        "練馬区オープンデータサイトから取り込んだデータセット一覧を検索します。練馬について調べるときに、人口、施設、防災、子育て、教育、文化財、行政手続、産業、まちづくりなど、どのデータセットが存在するか探す質問で使います。",
+      inputSchema: openDataDataSetSearchSchema
+    },
+    async (args) => {
+      return runLoggedTool("search_open_data_datasets", args, async () => {
+        const manifest = await loadOpenDataManifest();
+        return asToolResponse(searchOpenDataDataSets(manifest, args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "list_open_data_datasets",
+    {
+      title: "練馬区オープンデータのデータセット一覧を表示",
+      description:
+        "練馬区オープンデータサイトから取り込んだデータセット一覧を表示します。利用可能なデータ、カテゴリ別のデータ、行数が多いデータ、更新されたデータを把握したい質問で使います。",
+      inputSchema: openDataDataSetListSchema
+    },
+    async (args) => {
+      return runLoggedTool("list_open_data_datasets", args, async () => {
+        const manifest = await loadOpenDataManifest();
+        return asToolResponse(listOpenDataDataSets(manifest, args));
       });
     }
   );

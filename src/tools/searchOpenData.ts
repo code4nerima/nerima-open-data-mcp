@@ -1,6 +1,11 @@
 import { anyFieldIncludes, includesNormalized, normalizeLimit } from "../data/normalize.js";
 import type { CacheStore } from "../data/cacheStore.js";
-import type { CachedDataSet, OpenDataCacheManifest, OpenDataSearchResultItem } from "../types/openData.js";
+import type {
+  CachedDataSet,
+  OpenDataCacheManifest,
+  OpenDataDataSetSummary,
+  OpenDataSearchResultItem
+} from "../types/openData.js";
 import type { SearchResult } from "../types/facility.js";
 
 export interface OpenDataSearchArgs {
@@ -8,6 +13,26 @@ export interface OpenDataSearchArgs {
   category?: string;
   dataset?: string;
   limit?: number;
+}
+
+export interface OpenDataDataSetSearchArgs {
+  keyword?: string;
+  category?: string;
+  sortBy?: "title" | "rowCount" | "updatedAt";
+  sortOrder?: "asc" | "desc";
+  limit?: number;
+}
+
+function toDataSetSummary(dataset: OpenDataCacheManifest["datasets"][number]): OpenDataDataSetSummary {
+  return {
+    id: dataset.id,
+    title: dataset.title,
+    category: dataset.category,
+    updatedAt: dataset.updatedAt,
+    path: dataset.path,
+    csvFileCount: dataset.csvFileCount,
+    rowCount: dataset.rowCount
+  };
 }
 
 function rowValues(row: Record<string, string>): string[] {
@@ -110,4 +135,54 @@ export async function searchOpenDataFromStore(
     count: results.length,
     results
   };
+}
+
+export function searchOpenDataDataSets(
+  manifest: OpenDataCacheManifest | null,
+  args: OpenDataDataSetSearchArgs
+): SearchResult<OpenDataDataSetSummary> {
+  if (!manifest) {
+    return { count: 0, results: [] };
+  }
+
+  const limit = normalizeLimit(args.limit);
+  const sortBy = args.sortBy ?? "title";
+  const sortOrder = args.sortOrder ?? "asc";
+  const direction = sortOrder === "desc" ? -1 : 1;
+  const results = manifest.datasets
+    .map(toDataSetSummary)
+    .filter((dataset) => includesNormalized(dataset.category, args.category))
+    .filter((dataset) =>
+      anyFieldIncludes(
+        [
+          dataset.id,
+          dataset.title,
+          dataset.category,
+          dataset.updatedAt,
+          dataset.path,
+          dataset.csvFileCount,
+          dataset.rowCount
+        ],
+        args.keyword
+      )
+    )
+    .sort((a, b) => {
+      if (sortBy === "rowCount") {
+        return (a.rowCount - b.rowCount) * direction;
+      }
+      return String(a[sortBy] ?? "").localeCompare(String(b[sortBy] ?? ""), "ja") * direction;
+    })
+    .slice(0, limit);
+
+  return {
+    count: results.length,
+    results
+  };
+}
+
+export function listOpenDataDataSets(
+  manifest: OpenDataCacheManifest | null,
+  args: Omit<OpenDataDataSetSearchArgs, "keyword">
+): SearchResult<OpenDataDataSetSummary> {
+  return searchOpenDataDataSets(manifest, args);
 }

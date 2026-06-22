@@ -60,6 +60,16 @@ export interface OpenDataSearchResultItem {
   row: Record<string, string>;
 }
 
+export interface OpenDataDataSetSummary {
+  id: string;
+  title: string;
+  category: string;
+  updatedAt: string;
+  path: string;
+  csvFileCount: number;
+  rowCount: number;
+}
+
 export interface ProcedureInfo {
   name: string;
   documentName: string;
