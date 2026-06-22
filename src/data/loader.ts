@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import type { AedLocation, Facility, Park, Shelter } from "../types/facility.js";
-import type { CachedDataSet, OpenDataCacheManifest } from "../types/openData.js";
+import type {
+  CachedDataSet,
+  GarbageCollectionCache,
+  OpenDataCacheManifest,
+  RssNewsCache
+} from "../types/openData.js";
 import { getCacheStore } from "./cacheStore.js";
 import {
   mapAedFromCache,
@@ -20,6 +25,8 @@ export interface OpenDataSets {
 let cache: OpenDataSets | null = null;
 let openDataCache: { manifest: OpenDataCacheManifest | null; datasets: CachedDataSet[] } | null = null;
 let manifestCache: OpenDataCacheManifest | null | undefined;
+let newsCache: RssNewsCache | null | undefined;
+let garbageCollectionCache: GarbageCollectionCache | null | undefined;
 
 async function readJson<T>(fileName: string): Promise<T> {
   const filePath = path.join(process.cwd(), "data", fileName);
@@ -60,6 +67,8 @@ export function clearDataSetCache(): void {
   cache = null;
   openDataCache = null;
   manifestCache = undefined;
+  newsCache = undefined;
+  garbageCollectionCache = undefined;
 }
 
 export async function loadOpenDataManifest(): Promise<OpenDataCacheManifest | null> {
@@ -86,6 +95,24 @@ export async function loadOpenDataCache(): Promise<{
   };
 
   return openDataCache;
+}
+
+export async function loadNewsItems(): Promise<RssNewsCache | null> {
+  if (newsCache !== undefined) {
+    return newsCache;
+  }
+
+  newsCache = await getCacheStore().readNewsItems();
+  return newsCache;
+}
+
+export async function loadGarbageCollection(): Promise<GarbageCollectionCache | null> {
+  if (garbageCollectionCache !== undefined) {
+    return garbageCollectionCache;
+  }
+
+  garbageCollectionCache = await getCacheStore().readGarbageCollection();
+  return garbageCollectionCache;
 }
 
 const TOOL_DATASET_TITLES = [

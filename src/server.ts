@@ -3,7 +3,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import { getCacheStore } from "./data/cacheStore.js";
-import { clearDataSetCache, loadDataSets, loadOpenDataManifest } from "./data/loader.js";
+import {
+  clearDataSetCache,
+  loadDataSets,
+  loadGarbageCollection,
+  loadNewsItems,
+  loadOpenDataManifest
+} from "./data/loader.js";
 import { importOpenData } from "./data/openDataImport.js";
 import { searchAed } from "./tools/searchAed.js";
 import { asJsonToolResponse, asToolResponse } from "./tools/searchCommon.js";
@@ -13,6 +19,8 @@ import { searchParks } from "./tools/searchParks.js";
 import { searchShelters } from "./tools/searchShelters.js";
 import { listShelters } from "./tools/listShelters.js";
 import { getDatasetStats } from "./tools/getDatasetStats.js";
+import { listRecentNews, searchNews } from "./tools/searchNews.js";
+import { searchGarbageCollection } from "./tools/searchGarbageCollection.js";
 
 const optionalLimit = z
   .number()
@@ -39,6 +47,33 @@ const openDataSearchSchema = {
   keyword: z.string().optional().describe("Partial text to search across all cached CSV rows."),
   category: z.string().optional().describe("Dataset category partial match."),
   dataset: z.string().optional().describe("Dataset title, summary, or keyword partial match."),
+  limit: optionalLimit
+};
+
+const newsSearchSchema = {
+  keyword: z.string().optional().describe("Partial text to search for."),
+  category: z.string().optional().describe("RSS category partial match."),
+  from: z.string().optional().describe("Published date lower bound, such as 2026-06-01."),
+  to: z.string().optional().describe("Published date upper bound, such as 2026-06-30."),
+  limit: optionalLimit
+};
+
+const recentNewsSchema = {
+  category: z.string().optional().describe("RSS category partial match."),
+  from: z.string().optional().describe("Published date lower bound, such as 2026-06-01."),
+  to: z.string().optional().describe("Published date upper bound, such as 2026-06-30."),
+  limit: optionalLimit
+};
+
+const garbageCollectionSearchSchema = {
+  keyword: z.string().optional().describe("Partial text to search for."),
+  town: z.string().optional().describe("Town name partial match, such as 旭丘 or 南大泉."),
+  district: z.string().optional().describe("District/chome partial match, such as 1丁目 or 全域."),
+  day: z.string().optional().describe("Collection day partial match, such as 月曜 or 第1･3."),
+  wasteType: z
+    .string()
+    .optional()
+    .describe("Waste type partial match, such as 可燃ごみ, 不燃ごみ, 古紙, びん, or ペットボトル."),
   limit: optionalLimit
 };
 
@@ -158,6 +193,52 @@ export function createMcpServer(): McpServer {
       return runLoggedTool("search_open_data", args, async () => {
         const manifest = await loadOpenDataManifest();
         return asToolResponse(await searchOpenDataFromStore(getCacheStore(), manifest, args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "search_news",
+    {
+      title: "Search Nerima News RSS",
+      description: "Search cached Nerima City news RSS items by keyword, category, and published date.",
+      inputSchema: newsSearchSchema
+    },
+    async (args) => {
+      return runLoggedTool("search_news", args, async () => {
+        const news = await loadNewsItems();
+        return asToolResponse(searchNews(news?.items ?? [], args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "list_recent_news",
+    {
+      title: "List Recent Nerima News",
+      description: "List recent cached Nerima City news RSS items with optional category and date filters.",
+      inputSchema: recentNewsSchema
+    },
+    async (args) => {
+      return runLoggedTool("list_recent_news", args, async () => {
+        const news = await loadNewsItems();
+        return asToolResponse(listRecentNews(news?.items ?? [], args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "search_garbage_collection",
+    {
+      title: "Search Nerima Garbage Collection Days",
+      description:
+        "Search cached Nerima City garbage and recycling collection days by town, district, waste type, and day.",
+      inputSchema: garbageCollectionSearchSchema
+    },
+    async (args) => {
+      return runLoggedTool("search_garbage_collection", args, async () => {
+        const garbage = await loadGarbageCollection();
+        return asToolResponse(searchGarbageCollection(garbage?.items ?? [], args));
       });
     }
   );

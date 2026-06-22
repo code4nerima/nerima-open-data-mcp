@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { parseGarbageCollectionAreas } from "../data/garbageCollectionImport.js";
 import { normalizeText } from "../data/normalize.js";
+import { parseRssNewsItems } from "../data/rssNewsImport.js";
 import type { Facility } from "../types/facility.js";
+import type { GarbageCollectionArea, RssNewsItem } from "../types/openData.js";
 import { searchFacilities } from "./searchFacilities.js";
+import { searchGarbageCollection } from "./searchGarbageCollection.js";
+import { searchNews } from "./searchNews.js";
 
 const facilities: Facility[] = [
   {
@@ -56,5 +61,157 @@ describe("searchFacilities", () => {
 
     expect(result.count).toBe(1);
     expect(result.results).toHaveLength(1);
+  });
+});
+
+describe("parseRssNewsItems", () => {
+  it("parses Nerima RSS items", () => {
+    const items = parseRssNewsItems(`
+      <rss><channel><item>
+        <title>練馬産業見本市2026出展事業者募集</title>
+        <link>https://www.city.nerima.tokyo.jp/example.html</link>
+        <description>募集します</description>
+        <category>お知らせ</category>
+        <category>事業者向け</category>
+        <pubDate>Mon, 22 Jun 2026 00:00:00 GMT</pubDate>
+        <guid isPermaLink="false">51c019d1</guid>
+        <cms:orgShortName>産業経済部　経済課</cms:orgShortName>
+      </item></channel></rss>
+    `);
+
+    expect(items).toEqual([
+      {
+        id: "51c019d1",
+        title: "練馬産業見本市2026出展事業者募集",
+        link: "https://www.city.nerima.tokyo.jp/example.html",
+        summary: "募集します",
+        publishedAt: "2026-06-22T00:00:00.000Z",
+        categories: ["お知らせ", "事業者向け"],
+        organization: "産業経済部 経済課",
+        source: "nerima-rss-news"
+      }
+    ]);
+  });
+});
+
+describe("searchNews", () => {
+  const newsItems: RssNewsItem[] = [
+    {
+      id: "1",
+      title: "区報を発行しました",
+      link: "https://www.city.nerima.tokyo.jp/kuho.html",
+      summary: "",
+      publishedAt: "2026-06-20T15:00:00.000Z",
+      categories: ["お知らせ"],
+      organization: "広聴広報課",
+      source: "nerima-rss-news"
+    },
+    {
+      id: "2",
+      title: "講座を開催します",
+      link: "https://www.city.nerima.tokyo.jp/event.html",
+      summary: "",
+      publishedAt: "2026-06-18T00:00:00.000Z",
+      categories: ["イベント情報", "講座"],
+      organization: "文化・生涯学習課",
+      source: "nerima-rss-news"
+    }
+  ];
+
+  it("searches by keyword and category", () => {
+    const result = searchNews(newsItems, { keyword: "講座", category: "イベント" });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]?.id).toBe("2");
+  });
+
+  it("filters by published date", () => {
+    const result = searchNews(newsItems, { from: "2026-06-19" });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]?.id).toBe("1");
+  });
+});
+
+describe("parseGarbageCollectionAreas", () => {
+  it("parses garbage collection table rows", () => {
+    const items = parseGarbageCollectionAreas(
+      `
+      <p class="update">更新日：2026年4月1日</p>
+      <table>
+        <caption>あ行の地域（令和8年度）</caption>
+        <tr><th>町名</th><th>丁目</th><th>可燃ごみ</th><th>不燃ごみ</th><th>容器包装プラスチック・古紙</th><th>びん・缶</th><th>ペットボトル</th><th>令和8年4月～9年3月</th></tr>
+        <tr>
+          <td>旭丘</td><td>全域</td><td>水曜･土曜</td><td>第1･3 月曜</td><td>火曜</td><td>火曜</td><td>火曜</td>
+          <td><a href="a_gyochiiki.files/1_asahigaokaR8.pdf">カレンダー</a></td>
+        </tr>
+      </table>
+      `,
+      "https://www.city.nerima.tokyo.jp/kurashi/gomi/wakekata/ichiran/a_gyochiiki.html"
+    );
+
+    expect(items).toMatchObject([
+      {
+        id: "あ行-旭丘-全域",
+        kanaGroup: "あ行",
+        town: "旭丘",
+        district: "全域",
+        burnable: "水曜･土曜",
+        nonBurnable: "第1･3 月曜",
+        plasticAndPaper: "火曜",
+        bottlesAndCans: "火曜",
+        plasticBottles: "火曜",
+        calendarUrl:
+          "https://www.city.nerima.tokyo.jp/kurashi/gomi/wakekata/ichiran/a_gyochiiki.files/1_asahigaokaR8.pdf",
+        updatedAt: "2026年4月1日"
+      }
+    ]);
+  });
+});
+
+describe("searchGarbageCollection", () => {
+  const garbageItems: GarbageCollectionArea[] = [
+    {
+      id: "あ行-旭丘-全域",
+      kanaGroup: "あ行",
+      town: "旭丘",
+      district: "全域",
+      burnable: "水曜･土曜",
+      nonBurnable: "第1･3 月曜",
+      plasticAndPaper: "火曜",
+      bottlesAndCans: "火曜",
+      plasticBottles: "火曜",
+      calendarUrl: "https://example.com/asahigaoka.pdf",
+      sourceUrl: "https://example.com/a.html",
+      updatedAt: "2026年4月1日"
+    },
+    {
+      id: "ま行・や行-南大泉-2丁目",
+      kanaGroup: "ま行・や行",
+      town: "南大泉",
+      district: "2丁目",
+      burnable: "火曜･金曜",
+      nonBurnable: "第2･4 土曜",
+      plasticAndPaper: "木曜",
+      bottlesAndCans: "月曜",
+      plasticBottles: "月曜",
+      calendarUrl: "https://example.com/minamiooizumi.pdf",
+      sourceUrl: "https://example.com/maya.html",
+      updatedAt: "2026年4月1日"
+    }
+  ];
+
+  it("searches by town and waste type", () => {
+    const result = searchGarbageCollection(garbageItems, { town: "南大泉", wasteType: "不燃" });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]?.nonBurnable).toBe("第2･4 土曜");
+  });
+
+  it("filters by collection day", () => {
+    const result = searchGarbageCollection(garbageItems, { day: "水曜" });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]?.town).toBe("旭丘");
   });
 });

@@ -68,6 +68,42 @@ AED設置場所を検索します。
 - `dataset?: string`
 - `limit?: number`
 
+### `search_news`
+
+練馬区公式サイトの新着情報RSSを検索します。
+
+引数:
+
+- `keyword?: string`
+- `category?: string`
+- `from?: string`
+- `to?: string`
+- `limit?: number`
+
+### `list_recent_news`
+
+練馬区公式サイトの新着情報RSSを新しい順に一覧表示します。
+
+引数:
+
+- `category?: string`
+- `from?: string`
+- `to?: string`
+- `limit?: number`
+
+### `search_garbage_collection`
+
+練馬区公式サイトの地域別収集曜日一覧を検索します。
+
+引数:
+
+- `keyword?: string`
+- `town?: string`
+- `district?: string`
+- `day?: string`
+- `wasteType?: string`
+- `limit?: number`
+
 ### `get_dataset_stats`
 
 GCSキャッシュと主要データセットの統計情報を返します。避難所については、指定緊急避難場所と避難拠点を合算した総件数、収容人数ありの件数、最大収容人数、収容人数上位10件を返します。
@@ -198,6 +234,8 @@ GCSに置くオブジェクト:
 ```text
 gs://<bucket>/nerima-open-data/cache/catalog.json
 gs://<bucket>/nerima-open-data/cache/datasets/*.json
+gs://<bucket>/nerima-open-data/cache/rss/news.json
+gs://<bucket>/nerima-open-data/cache/garbage/collection-days.json
 ```
 
 ## 運用確認

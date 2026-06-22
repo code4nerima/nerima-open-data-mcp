@@ -59,3 +59,43 @@ export interface OpenDataSearchResultItem {
   fileUrl: string;
   row: Record<string, string>;
 }
+
+export interface RssNewsItem {
+  id: string;
+  title: string;
+  link: string;
+  summary: string;
+  publishedAt: string;
+  categories: string[];
+  organization: string;
+  source: "nerima-rss-news";
+}
+
+export interface RssNewsCache {
+  generatedAt: string;
+  sourceUrl: string;
+  itemCount: number;
+  items: RssNewsItem[];
+}
+
+export interface GarbageCollectionArea {
+  id: string;
+  kanaGroup: string;
+  town: string;
+  district: string;
+  burnable: string;
+  nonBurnable: string;
+  plasticAndPaper: string;
+  bottlesAndCans: string;
+  plasticBottles: string;
+  calendarUrl: string;
+  sourceUrl: string;
+  updatedAt: string;
+}
+
+export interface GarbageCollectionCache {
+  generatedAt: string;
+  sourceUrl: string;
+  itemCount: number;
+  items: GarbageCollectionArea[];
+}

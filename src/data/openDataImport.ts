@@ -2,6 +2,11 @@ import path from "node:path";
 import { decodeCsvBuffer, parseCsvRows } from "./csv.js";
 import { getCacheStore } from "./cacheStore.js";
 import type { CachedCsvFile, CachedDataSet, CatalogRow, OpenDataCacheManifest } from "../types/openData.js";
+import { fetchRssNewsItems, NERIMA_RSS_NEWS_URL } from "./rssNewsImport.js";
+import {
+  fetchGarbageCollectionAreas,
+  NERIMA_GARBAGE_COLLECTION_INDEX_URL
+} from "./garbageCollectionImport.js";
 
 export const NERIMA_OPEN_DATA_BASE_URL =
   "https://www.city.nerima.tokyo.jp/kusei/tokei/opendata/opendatasite/";
@@ -291,6 +296,8 @@ export interface ImportOpenDataSummary {
   datasetCount: number;
   csvFileCount: number;
   totalRowCount: number;
+  rssNewsCount: number;
+  garbageCollectionAreaCount: number;
 }
 
 export async function importOpenData(): Promise<ImportOpenDataSummary> {
@@ -341,6 +348,34 @@ export async function importOpenData(): Promise<ImportOpenDataSummary> {
     datasets: manifestDatasets
   };
 
+  let rssNewsCount = 0;
+  try {
+    const newsItems = await fetchRssNewsItems();
+    rssNewsCount = newsItems.length;
+    await cacheStore.writeNewsItems({
+      generatedAt,
+      sourceUrl: NERIMA_RSS_NEWS_URL,
+      itemCount: newsItems.length,
+      items: newsItems
+    });
+  } catch (error) {
+    console.warn(`Skipping RSS news ${NERIMA_RSS_NEWS_URL}:`, error);
+  }
+
+  let garbageCollectionAreaCount = 0;
+  try {
+    const garbageCollectionAreas = await fetchGarbageCollectionAreas();
+    garbageCollectionAreaCount = garbageCollectionAreas.length;
+    await cacheStore.writeGarbageCollection({
+      generatedAt,
+      sourceUrl: NERIMA_GARBAGE_COLLECTION_INDEX_URL,
+      itemCount: garbageCollectionAreas.length,
+      items: garbageCollectionAreas
+    });
+  } catch (error) {
+    console.warn(`Skipping garbage collection days ${NERIMA_GARBAGE_COLLECTION_INDEX_URL}:`, error);
+  }
+
   await cacheStore.writeManifest(manifest);
 
   return {
@@ -348,6 +383,8 @@ export async function importOpenData(): Promise<ImportOpenDataSummary> {
     sourceCatalogUrl: NERIMA_OPEN_DATA_LIST_URL,
     datasetCount: manifest.datasetCount,
     csvFileCount: manifest.csvFileCount,
-    totalRowCount: manifest.totalRowCount
+    totalRowCount: manifest.totalRowCount,
+    rssNewsCount,
+    garbageCollectionAreaCount
   };
 }

@@ -1,6 +1,11 @@
 import { Storage, type UploadOptions } from "@google-cloud/storage";
 import { GoogleAuth } from "google-auth-library";
-import type { CachedDataSet, OpenDataCacheManifest } from "../../types/openData.js";
+import type {
+  CachedDataSet,
+  GarbageCollectionCache,
+  OpenDataCacheManifest,
+  RssNewsCache
+} from "../../types/openData.js";
 import type { CacheStore } from "../cacheStore.js";
 
 const STORAGE_SCOPES = [
@@ -9,6 +14,8 @@ const STORAGE_SCOPES = [
   "https://www.googleapis.com/auth/devstorage.full_control"
 ];
 const SIGNED_URL_EXPIRATION_MS = 10 * 60 * 1000;
+const RSS_NEWS_PATH = "rss/news.json";
+const GARBAGE_COLLECTION_PATH = "garbage/collection-days.json";
 
 function normalizePrefix(prefix: string): string {
   return prefix.replace(/^\/+|\/+$/g, "");
@@ -192,6 +199,8 @@ async function resetWithSignedUrls(bucketName: string, prefix: string): Promise<
     );
   }
 
+  await deleteObjectWithSignedUrl(bucketName, prefix, RSS_NEWS_PATH);
+  await deleteObjectWithSignedUrl(bucketName, prefix, GARBAGE_COLLECTION_PATH);
   await deleteObjectWithSignedUrl(bucketName, prefix, "catalog.json");
 }
 
@@ -233,6 +242,16 @@ export function createGcsCacheStore(): CacheStore {
       const requiredBucketName = requireBucketName();
       // Write manifest last so readers only see a complete cache generation.
       await uploadJson(requiredBucketName, prefix, "catalog.json", manifest);
+    },
+
+    async writeNewsItems(newsCache: RssNewsCache): Promise<void> {
+      const requiredBucketName = requireBucketName();
+      await uploadJson(requiredBucketName, prefix, RSS_NEWS_PATH, newsCache);
+    },
+
+    async writeGarbageCollection(garbageCache: GarbageCollectionCache): Promise<void> {
+      const requiredBucketName = requireBucketName();
+      await uploadJson(requiredBucketName, prefix, GARBAGE_COLLECTION_PATH, garbageCache);
     },
 
     async readManifest(): Promise<OpenDataCacheManifest | null> {
@@ -294,6 +313,54 @@ export function createGcsCacheStore(): CacheStore {
           return cachedDataSet;
         })
       );
+    },
+
+    async readNewsItems(): Promise<RssNewsCache | null> {
+      if (!bucketName) {
+        return null;
+      }
+
+      const storage = createStorage();
+      const file = storage.bucket(bucketName).file(objectName(prefix, RSS_NEWS_PATH));
+
+      try {
+        const [content] = await file.download();
+        return JSON.parse(content.toString("utf8")) as RssNewsCache;
+      } catch (error) {
+        if ((error as { code?: number }).code === 404) {
+          return null;
+        }
+        if (isRetryableStorageError(error)) {
+          return readJsonWithSignedUrl<RssNewsCache>(bucketName, prefix, RSS_NEWS_PATH);
+        }
+        throw error;
+      }
+    },
+
+    async readGarbageCollection(): Promise<GarbageCollectionCache | null> {
+      if (!bucketName) {
+        return null;
+      }
+
+      const storage = createStorage();
+      const file = storage.bucket(bucketName).file(objectName(prefix, GARBAGE_COLLECTION_PATH));
+
+      try {
+        const [content] = await file.download();
+        return JSON.parse(content.toString("utf8")) as GarbageCollectionCache;
+      } catch (error) {
+        if ((error as { code?: number }).code === 404) {
+          return null;
+        }
+        if (isRetryableStorageError(error)) {
+          return readJsonWithSignedUrl<GarbageCollectionCache>(
+            bucketName,
+            prefix,
+            GARBAGE_COLLECTION_PATH
+          );
+        }
+        throw error;
+      }
     }
   };
 }
