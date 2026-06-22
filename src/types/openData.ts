@@ -75,6 +75,17 @@ export interface ProcedureInfo {
   fileUrl: string;
 }
 
+export interface ServiceCounterInfo {
+  location: string;
+  department: string;
+  section: string;
+  phone: string;
+  procedureCount: number;
+  procedureExamples: string[];
+  sourceUrl: string;
+  fileUrl: string;
+}
+
 export interface RssNewsItem {
   id: string;
   title: string;

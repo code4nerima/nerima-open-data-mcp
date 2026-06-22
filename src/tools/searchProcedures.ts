@@ -13,7 +13,11 @@ export interface ProcedureSearchArgs {
   limit?: number;
 }
 
-function toProcedureInfo(dataset: CachedDataSet, row: Record<string, string>): ProcedureInfo {
+export function isProcedureDataSet(dataset: CachedDataSet): boolean {
+  return dataset.title === PROCEDURE_DATASET_TITLE;
+}
+
+export function toProcedureInfo(dataset: CachedDataSet, row: Record<string, string>): ProcedureInfo {
   return {
     name: row["手続名称"] ?? "",
     documentName: row["書類正式名称"] ?? "",
@@ -37,7 +41,7 @@ export function searchProcedures(
   const limit = normalizeLimit(args.limit);
   const results: ProcedureInfo[] = [];
 
-  for (const dataset of datasets.filter((dataSet) => dataSet.title === PROCEDURE_DATASET_TITLE)) {
+  for (const dataset of datasets.filter(isProcedureDataSet)) {
     for (const file of dataset.files) {
       for (const row of file.rows) {
         const item = toProcedureInfo({ ...dataset, files: [file] }, row);

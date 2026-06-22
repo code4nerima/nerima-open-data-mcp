@@ -116,6 +116,17 @@
 - `hasOnlineApplication?: boolean`
 - `limit?: number`
 
+### `search_service_counters`
+
+練馬区オープンデータの「行政手続情報」から、場所・担当課・担当係・電話番号ごとに手続き窓口候補を検索します。どこで申請するか、証明書や相談の窓口、担当窓口、本庁舎や石神井庁舎の窓口を調べる質問に向いています。
+
+引数:
+
+- `keyword?: string`
+- `department?: string`
+- `location?: string`
+- `limit?: number`
+
 ### `get_dataset_stats`
 
 GCSキャッシュと主要データセットの統計情報を返します。避難所については、指定緊急避難場所と避難拠点を合算した総件数、収容人数ありの件数、最大収容人数、収容人数上位10件を返します。

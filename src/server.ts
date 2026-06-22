@@ -22,6 +22,7 @@ import { getDatasetStats } from "./tools/getDatasetStats.js";
 import { listRecentNews, searchNews } from "./tools/searchNews.js";
 import { searchGarbageCollection } from "./tools/searchGarbageCollection.js";
 import { searchProceduresFromStore } from "./tools/searchProcedures.js";
+import { searchServiceCountersFromStore } from "./tools/searchServiceCounters.js";
 
 const optionalLimit = z
   .number()
@@ -112,6 +113,16 @@ const procedureSearchSchema = {
     .boolean()
     .optional()
     .describe("trueなら電子申請URLがある手続だけ、falseなら電子申請URLがない手続だけ返す。"),
+  limit: optionalLimit
+};
+
+const serviceCounterSearchSchema = {
+  keyword: z
+    .string()
+    .optional()
+    .describe("窓口、担当課、担当係、電話番号、扱う手続き名の部分一致。例: 証明書、相談、区報、危機管理。"),
+  location: z.string().optional().describe("窓口・場所の部分一致。例: 本庁舎7階、東庁舎、石神井庁舎。"),
+  department: z.string().optional().describe("担当課の部分一致。例: 広聴広報課、危機管理課、戸籍住民課。"),
   limit: optionalLimit
 };
 
@@ -299,6 +310,22 @@ export function createMcpServer(): McpServer {
       return runLoggedTool("search_procedures", args, async () => {
         const manifest = await loadOpenDataManifest();
         return asToolResponse(await searchProceduresFromStore(getCacheStore(), manifest, args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "search_service_counters",
+    {
+      title: "練馬区の手続き窓口を検索",
+      description:
+        "練馬区オープンデータの「行政手続情報」から、場所・担当課・担当係・電話番号ごとに窓口候補を集約して検索します。どこで申請するか、証明書や相談の窓口、担当窓口、本庁舎や石神井庁舎の窓口を調べる質問で使います。",
+      inputSchema: serviceCounterSearchSchema
+    },
+    async (args) => {
+      return runLoggedTool("search_service_counters", args, async () => {
+        const manifest = await loadOpenDataManifest();
+        return asToolResponse(await searchServiceCountersFromStore(getCacheStore(), manifest, args));
       });
     }
   );

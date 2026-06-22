@@ -8,6 +8,7 @@ import { searchFacilities } from "./searchFacilities.js";
 import { searchGarbageCollection } from "./searchGarbageCollection.js";
 import { searchNews } from "./searchNews.js";
 import { searchProcedures } from "./searchProcedures.js";
+import { searchServiceCounters } from "./searchServiceCounters.js";
 
 const facilities: Facility[] = [
   {
@@ -282,5 +283,26 @@ describe("searchProcedures", () => {
 
     expect(result.count).toBe(1);
     expect(result.results[0]?.name).toBe("区民のひろば申込");
+  });
+
+  it("groups procedures as service counters", () => {
+    const result = searchServiceCounters(datasets, { location: "本庁舎7階" });
+
+    expect(result.count).toBe(2);
+    expect(result.results[0]).toMatchObject({
+      location: "本庁舎7階",
+      department: "危機管理課",
+      section: "防災調整係",
+      phone: "(03)5984-1686",
+      procedureCount: 1,
+      procedureExamples: ["被災証明書交付申請"]
+    });
+  });
+
+  it("searches service counters by handled procedure keyword", () => {
+    const result = searchServiceCounters(datasets, { keyword: "区民のひろば" });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]?.department).toBe("広聴広報課");
   });
 });
