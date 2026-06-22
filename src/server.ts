@@ -21,6 +21,7 @@ import { listShelters } from "./tools/listShelters.js";
 import { getDatasetStats } from "./tools/getDatasetStats.js";
 import { listRecentNews, searchNews } from "./tools/searchNews.js";
 import { searchGarbageCollection } from "./tools/searchGarbageCollection.js";
+import { searchProceduresFromStore } from "./tools/searchProcedures.js";
 
 const optionalLimit = z
   .number()
@@ -74,6 +75,17 @@ const garbageCollectionSearchSchema = {
     .string()
     .optional()
     .describe("Waste type partial match, such as 可燃ごみ, 不燃ごみ, 古紙, びん, or ペットボトル."),
+  limit: optionalLimit
+};
+
+const procedureSearchSchema = {
+  keyword: z.string().optional().describe("Partial text to search for."),
+  department: z.string().optional().describe("Department partial match, such as 広聴広報課."),
+  location: z.string().optional().describe("Location partial match, such as 本庁舎7階."),
+  hasOnlineApplication: z
+    .boolean()
+    .optional()
+    .describe("When true, only procedures with online application URLs are returned."),
   limit: optionalLimit
 };
 
@@ -239,6 +251,22 @@ export function createMcpServer(): McpServer {
       return runLoggedTool("search_garbage_collection", args, async () => {
         const garbage = await loadGarbageCollection();
         return asToolResponse(searchGarbageCollection(garbage?.items ?? [], args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "search_procedures",
+    {
+      title: "Search Nerima Administrative Procedures",
+      description:
+        "Search cached Nerima City administrative procedure information by keyword, department, location, and online application availability.",
+      inputSchema: procedureSearchSchema
+    },
+    async (args) => {
+      return runLoggedTool("search_procedures", args, async () => {
+        const manifest = await loadOpenDataManifest();
+        return asToolResponse(await searchProceduresFromStore(getCacheStore(), manifest, args));
       });
     }
   );

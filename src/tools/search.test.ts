@@ -7,6 +7,7 @@ import type { GarbageCollectionArea, RssNewsItem } from "../types/openData.js";
 import { searchFacilities } from "./searchFacilities.js";
 import { searchGarbageCollection } from "./searchGarbageCollection.js";
 import { searchNews } from "./searchNews.js";
+import { searchProcedures } from "./searchProcedures.js";
 
 const facilities: Facility[] = [
   {
@@ -213,5 +214,73 @@ describe("searchGarbageCollection", () => {
 
     expect(result.count).toBe(1);
     expect(result.results[0]?.town).toBe("旭丘");
+  });
+});
+
+describe("searchProcedures", () => {
+  const datasets = [
+    {
+      id: "0000000118",
+      title: "行政手続情報",
+      summary: "",
+      keywords: "",
+      category: "統計・区政情報",
+      pageUrl: "https://www.city.nerima.tokyo.jp/tetuzuki.html",
+      updatedAt: "",
+      license: "",
+      fetchedAt: "",
+      files: [
+        {
+          title: "行政手続情報",
+          url: "https://www.city.nerima.tokyo.jp/tetuzuki.csv",
+          rowCount: 2,
+          rows: [
+            {
+              "手続名称": "被災証明書交付申請",
+              "書類正式名称": "被災証明書交付申請書",
+              "担当課": "危機管理課",
+              "担当係": "防災調整係",
+              "場所": "本庁舎7階",
+              "用途": "被害の事実を証明する。",
+              "留意事項": "区長が必要と認める書類が必要",
+              "電話番号": "(03)5984-1686",
+              "URL": "https://www.city.nerima.tokyo.jp/risaisyoumei.html",
+              "電子申請": ""
+            },
+            {
+              "手続名称": "区民のひろば申込",
+              "書類正式名称": "掲載申込書",
+              "担当課": "広聴広報課",
+              "担当係": "広報係",
+              "場所": "本庁舎7階",
+              "用途": "区報掲載を申し込む。",
+              "留意事項": "",
+              "電話番号": "(03)5984-2690",
+              "URL": "https://www.city.nerima.tokyo.jp/hiroba.html",
+              "電子申請": "https://www.city.nerima.tokyo.jp/form"
+            }
+          ]
+        }
+      ]
+    }
+  ];
+
+  it("searches procedures by keyword and department", () => {
+    const result = searchProcedures(datasets, { keyword: "証明書", department: "危機" });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]).toMatchObject({
+      name: "被災証明書交付申請",
+      department: "危機管理課",
+      sourceUrl: "https://www.city.nerima.tokyo.jp/tetuzuki.html",
+      fileUrl: "https://www.city.nerima.tokyo.jp/tetuzuki.csv"
+    });
+  });
+
+  it("filters procedures by online application availability", () => {
+    const result = searchProcedures(datasets, { hasOnlineApplication: true });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]?.name).toBe("区民のひろば申込");
   });
 });

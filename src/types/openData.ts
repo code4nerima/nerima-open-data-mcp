@@ -60,6 +60,21 @@ export interface OpenDataSearchResultItem {
   row: Record<string, string>;
 }
 
+export interface ProcedureInfo {
+  name: string;
+  documentName: string;
+  department: string;
+  section: string;
+  location: string;
+  purpose: string;
+  notes: string;
+  phone: string;
+  url: string;
+  onlineApplication: string;
+  sourceUrl: string;
+  fileUrl: string;
+}
+
 export interface RssNewsItem {
   id: string;
   title: string;

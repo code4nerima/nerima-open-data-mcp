@@ -104,6 +104,18 @@ AED設置場所を検索します。
 - `wasteType?: string`
 - `limit?: number`
 
+### `search_procedures`
+
+練馬区オープンデータの行政手続情報を検索します。
+
+引数:
+
+- `keyword?: string`
+- `department?: string`
+- `location?: string`
+- `hasOnlineApplication?: boolean`
+- `limit?: number`
+
 ### `get_dataset_stats`
 
 GCSキャッシュと主要データセットの統計情報を返します。避難所については、指定緊急避難場所と避難拠点を合算した総件数、収容人数ありの件数、最大収容人数、収容人数上位10件を返します。
