@@ -29,71 +29,97 @@ const optionalLimit = z
   .min(0)
   .max(50)
   .optional()
-  .describe("Maximum number of results. Defaults to 10.");
+  .describe("返す件数の上限。省略時は10件、最大50件。");
 
 const facilitySearchSchema = {
-  keyword: z.string().optional().describe("Partial text to search for."),
-  category: z.string().optional().describe("Facility category partial match."),
-  area: z.string().optional().describe("Address or area partial match."),
+  keyword: z
+    .string()
+    .optional()
+    .describe("施設名、所在地、電話番号、備考などの部分一致。例: 図書館、地域集会所、区民館、体育館。"),
+  category: z
+    .string()
+    .optional()
+    .describe("施設分類の部分一致。例: 図書館、区民館、地域集会所、スポーツ施設、庁舎。"),
+  area: z.string().optional().describe("住所・地域名の部分一致。例: 光が丘、石神井、練馬、豊玉北。"),
   limit: optionalLimit
 };
 
 const basicSearchSchema = {
-  keyword: z.string().optional().describe("Partial text to search for."),
-  area: z.string().optional().describe("Address or area partial match."),
+  keyword: z.string().optional().describe("名称、住所、種別、備考などの部分一致。"),
+  area: z.string().optional().describe("住所・地域名の部分一致。例: 光が丘、石神井、練馬、豊玉。"),
   limit: optionalLimit
 };
 
 const openDataSearchSchema = {
-  keyword: z.string().optional().describe("Partial text to search across all cached CSV rows."),
-  category: z.string().optional().describe("Dataset category partial match."),
-  dataset: z.string().optional().describe("Dataset title, summary, or keyword partial match."),
+  keyword: z
+    .string()
+    .optional()
+    .describe("全CSV行の項目名・値を横断検索する語句。例: 住民基本台帳、人口、保育園、防災、文化財。"),
+  category: z
+    .string()
+    .optional()
+    .describe("オープンデータ分類の部分一致。例: 統計・区政情報、防災・安全安心、子育て・教育。"),
+  dataset: z
+    .string()
+    .optional()
+    .describe(
+      "データセット名・概要・キーワードの部分一致。例: 行政手続情報、公共施設一覧、AED設置箇所一覧、指定緊急避難場所一覧、避難拠点、公園トイレ一覧。"
+    ),
   limit: optionalLimit
 };
 
 const newsSearchSchema = {
-  keyword: z.string().optional().describe("Partial text to search for."),
-  category: z.string().optional().describe("RSS category partial match."),
-  from: z.string().optional().describe("Published date lower bound, such as 2026-06-01."),
-  to: z.string().optional().describe("Published date upper bound, such as 2026-06-30."),
+  keyword: z
+    .string()
+    .optional()
+    .describe("新着情報のタイトル、本文概要、担当組織、カテゴリの部分一致。例: 区報、報道発表、募集、イベント。"),
+  category: z.string().optional().describe("RSSカテゴリの部分一致。例: お知らせ、イベント情報、子育て、事業者向け。"),
+  from: z.string().optional().describe("公開日の開始日。例: 2026-06-01。"),
+  to: z.string().optional().describe("公開日の終了日。例: 2026-06-30。"),
   limit: optionalLimit
 };
 
 const recentNewsSchema = {
-  category: z.string().optional().describe("RSS category partial match."),
-  from: z.string().optional().describe("Published date lower bound, such as 2026-06-01."),
-  to: z.string().optional().describe("Published date upper bound, such as 2026-06-30."),
+  category: z.string().optional().describe("RSSカテゴリの部分一致。例: お知らせ、イベント情報、子育て、事業者向け。"),
+  from: z.string().optional().describe("公開日の開始日。例: 2026-06-01。"),
+  to: z.string().optional().describe("公開日の終了日。例: 2026-06-30。"),
   limit: optionalLimit
 };
 
 const garbageCollectionSearchSchema = {
-  keyword: z.string().optional().describe("Partial text to search for."),
-  town: z.string().optional().describe("Town name partial match, such as 旭丘 or 南大泉."),
-  district: z.string().optional().describe("District/chome partial match, such as 1丁目 or 全域."),
-  day: z.string().optional().describe("Collection day partial match, such as 月曜 or 第1･3."),
+  keyword: z
+    .string()
+    .optional()
+    .describe("町名、丁目、ごみ種別、収集曜日を横断検索する語句。例: 南大泉、不燃、古紙、水曜。"),
+  town: z.string().optional().describe("町名の部分一致。例: 旭丘、南大泉、光が丘、石神井町。"),
+  district: z.string().optional().describe("丁目・地域条件の部分一致。例: 1丁目、2・3丁目、全域、上記以外。"),
+  day: z.string().optional().describe("収集曜日や週条件の部分一致。例: 月曜、水曜、第1･3、第2･4。"),
   wasteType: z
     .string()
     .optional()
-    .describe("Waste type partial match, such as 可燃ごみ, 不燃ごみ, 古紙, びん, or ペットボトル."),
+    .describe("ごみ・資源種別の部分一致。例: 可燃ごみ、不燃ごみ、容器包装プラスチック、古紙、びん、缶、ペットボトル。"),
   limit: optionalLimit
 };
 
 const procedureSearchSchema = {
-  keyword: z.string().optional().describe("Partial text to search for."),
-  department: z.string().optional().describe("Department partial match, such as 広聴広報課."),
-  location: z.string().optional().describe("Location partial match, such as 本庁舎7階."),
+  keyword: z
+    .string()
+    .optional()
+    .describe("手続名称、書類正式名称、用途、留意事項、URL、電子申請URLなどの部分一致。例: 証明書、申請、届出、相談、区報。"),
+  department: z.string().optional().describe("担当課の部分一致。例: 広聴広報課、危機管理課、戸籍住民課。"),
+  location: z.string().optional().describe("窓口・場所の部分一致。例: 本庁舎7階、東庁舎、石神井庁舎。"),
   hasOnlineApplication: z
     .boolean()
     .optional()
-    .describe("When true, only procedures with online application URLs are returned."),
+    .describe("trueなら電子申請URLがある手続だけ、falseなら電子申請URLがない手続だけ返す。"),
   limit: optionalLimit
 };
 
 const listSheltersSchema = {
-  area: z.string().optional().describe("Address or area partial match."),
-  disasterType: z.string().optional().describe("Disaster type partial match, such as 洪水 or 地震."),
-  sortBy: z.enum(["name", "capacity"]).optional().describe("Sort field. Defaults to capacity."),
-  sortOrder: z.enum(["asc", "desc"]).optional().describe("Sort order. Defaults to desc."),
+  area: z.string().optional().describe("住所・地域名の部分一致。例: 光が丘、石神井、練馬、豊玉。"),
+  disasterType: z.string().optional().describe("対応災害種別の部分一致。例: 地震、火災、洪水、土砂災害。"),
+  sortBy: z.enum(["name", "capacity"]).optional().describe("並び替え項目。capacityなら収容人数順、nameなら名称順。"),
+  sortOrder: z.enum(["asc", "desc"]).optional().describe("並び順。ascは昇順、descは降順。省略時はdesc。"),
   limit: optionalLimit
 };
 
@@ -120,8 +146,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "search_facilities",
     {
-      title: "Search Nerima Facilities",
-      description: "Search public facilities in Nerima City by keyword, category, and area.",
+      title: "練馬区の公共施設を検索",
+      description:
+        "練馬区オープンデータの「公共施設一覧」を検索します。区役所、図書館、地域集会所、区民館、体育館、文化施設、住所、電話番号、施設分類を調べる質問で使います。",
       inputSchema: facilitySearchSchema
     },
     async (args) => {
@@ -135,8 +162,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "search_aed",
     {
-      title: "Search Nerima AED Locations",
-      description: "Search AED installation locations in Nerima City by keyword and area.",
+      title: "練馬区のAED設置場所を検索",
+      description:
+        "練馬区オープンデータの「AED設置箇所一覧」を検索します。AED、救命設備、設置施設、住所、地域、公共施設内のAEDを探す質問で使います。",
       inputSchema: basicSearchSchema
     },
     async (args) => {
@@ -150,8 +178,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "search_shelters",
     {
-      title: "Search Nerima Shelters",
-      description: "Search evacuation sites and disaster prevention facilities in Nerima City.",
+      title: "練馬区の避難所・防災施設を検索",
+      description:
+        "練馬区オープンデータの「指定緊急避難場所一覧」「避難拠点」を検索します。避難所、避難場所、防災、地震、火災、洪水、災害時の行き先、住所、地域で探す質問で使います。",
       inputSchema: basicSearchSchema
     },
     async (args) => {
@@ -165,9 +194,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "list_shelters",
     {
-      title: "List Nerima Shelters",
+      title: "練馬区の避難所一覧を表示",
       description:
-        "List evacuation sites and disaster facilities with sorting by capacity or name.",
+        "練馬区の指定緊急避難場所・避難拠点を一覧表示します。収容人数が多い避難所、地域別の避難所、災害種別ごとの避難場所を比較したい質問で使います。",
       inputSchema: listSheltersSchema
     },
     async (args) => {
@@ -181,8 +210,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "search_parks",
     {
-      title: "Search Nerima Parks",
-      description: "Search park records extracted from Nerima City public facility data.",
+      title: "練馬区の公園を検索",
+      description:
+        "練馬区オープンデータ由来の公園情報を検索します。公園名、所在地、地域、公園トイレ、近くの公園を探す質問で使います。",
       inputSchema: basicSearchSchema
     },
     async (args) => {
@@ -196,9 +226,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "search_open_data",
     {
-      title: "Search All Cached Nerima Open Data",
+      title: "練馬区オープンデータ全CSVを横断検索",
       description:
-        "Search across all CSV datasets imported from the Nerima City open data site.",
+        "練馬区オープンデータサイトから取り込んだ全CSVの中身を横断検索します。公共施設一覧、AED設置箇所一覧、行政手続情報、人口統計、文化財、防災、子育て、教育、産業、まちづくりなど、専用toolがないデータセットや幅広い調査で使います。",
       inputSchema: openDataSearchSchema
     },
     async (args) => {
@@ -212,8 +242,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "search_news",
     {
-      title: "Search Nerima News RSS",
-      description: "Search cached Nerima City news RSS items by keyword, category, and published date.",
+      title: "練馬区公式サイトの新着情報を検索",
+      description:
+        "練馬区公式サイトの新着情報RSSを検索します。お知らせ、区報、報道発表、募集、イベント、講座、事業者向け情報、最近更新されたページを探す質問で使います。",
       inputSchema: newsSearchSchema
     },
     async (args) => {
@@ -227,8 +258,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "list_recent_news",
     {
-      title: "List Recent Nerima News",
-      description: "List recent cached Nerima City news RSS items with optional category and date filters.",
+      title: "練馬区公式サイトの新着情報を新しい順に表示",
+      description:
+        "練馬区公式サイトの新着情報RSSを新しい順に一覧表示します。最近のお知らせ、直近の区報、最新イベント、報道発表、更新情報を確認する質問で使います。",
       inputSchema: recentNewsSchema
     },
     async (args) => {
@@ -242,9 +274,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "search_garbage_collection",
     {
-      title: "Search Nerima Garbage Collection Days",
+      title: "練馬区のごみ・資源収集曜日を検索",
       description:
-        "Search cached Nerima City garbage and recycling collection days by town, district, waste type, and day.",
+        "練馬区公式サイトの「地域別収集曜日一覧」を検索します。ごみの日、可燃ごみ、不燃ごみ、容器包装プラスチック、古紙、びん、缶、ペットボトル、町名、丁目、収集カレンダーPDFを調べる質問で使います。",
       inputSchema: garbageCollectionSearchSchema
     },
     async (args) => {
@@ -258,9 +290,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "search_procedures",
     {
-      title: "Search Nerima Administrative Procedures",
+      title: "練馬区の行政手続情報を検索",
       description:
-        "Search cached Nerima City administrative procedure information by keyword, department, location, and online application availability.",
+        "練馬区オープンデータの「行政手続情報」を検索します。申請、届出、証明書、相談、必要書類、担当課、担当係、窓口、場所、電話番号、電子申請URLを調べる質問で使います。",
       inputSchema: procedureSearchSchema
     },
     async (args) => {
@@ -274,9 +306,9 @@ export function createMcpServer(): McpServer {
   server.registerTool(
     "get_dataset_stats",
     {
-      title: "Get Nerima Open Data Stats",
+      title: "練馬区データセット統計を取得",
       description:
-        "Return dataset counts and shelter capacity statistics, including top 10 shelters by capacity.",
+        "GCSキャッシュ済みの練馬区オープンデータ件数、CSVファイル数、総行数、主要データセット件数、避難所の収容人数上位を確認します。データ取り込み状況やキャッシュ規模を知りたい質問で使います。",
       inputSchema: {}
     },
     async () => {
