@@ -470,7 +470,9 @@ export function createApp(): express.Express {
         return;
       }
 
-      const summary = await importOpenData();
+      const summary = await importOpenData({
+        forceRefresh: req.body?.forceRefresh === true
+      });
       clearDataSetCache();
       res.json({
         ok: true,

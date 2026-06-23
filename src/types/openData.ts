@@ -44,6 +44,7 @@ export interface OpenDataCacheManifest {
     title: string;
     category: string;
     updatedAt: string;
+    pageUrl?: string;
     path: string;
     csvFileCount: number;
     rowCount: number;

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canReuseManifestEntry } from "../data/openDataImport.js";
 import { parseGarbageCollectionAreas } from "../data/garbageCollectionImport.js";
 import { normalizeText } from "../data/normalize.js";
 import { parseRssNewsItems } from "../data/rssNewsImport.js";
@@ -124,6 +125,55 @@ describe("searchOpenDataDataSets", () => {
       "行政手続情報",
       "文化財一覧"
     ]);
+  });
+});
+
+describe("canReuseManifestEntry", () => {
+  const catalogRow = {
+    id: "0000000037",
+    title: "文化財一覧",
+    summary: "",
+    keywords: "文化財",
+    category: "文化・生涯学習",
+    pageUrl: "https://www.city.nerima.tokyo.jp/kusei/tokei/opendata/opendatasite/bunka/cultural_property.html",
+    updateFrequency: "毎年",
+    publishedAt: "2017-06-16",
+    updatedAt: "2026-06-15",
+    fileFormats: "csv,xlsx",
+    license: "CC-BY",
+    status: "配信中"
+  };
+
+  it("reuses an unchanged dataset manifest entry", () => {
+    expect(
+      canReuseManifestEntry(catalogRow, {
+        id: "0000000037",
+        title: "文化財一覧",
+        category: "文化・生涯学習",
+        updatedAt: "2026-06-15",
+        pageUrl:
+          "https://www.city.nerima.tokyo.jp/kusei/tokei/opendata/opendatasite/bunka/cultural_property.html",
+        path: "datasets/0000000037-cultural-property.json",
+        csvFileCount: 1,
+        rowCount: 223
+      })
+    ).toBe(true);
+  });
+
+  it("refreshes a dataset when the catalog updated date changes", () => {
+    expect(
+      canReuseManifestEntry(catalogRow, {
+        id: "0000000037",
+        title: "文化財一覧",
+        category: "文化・生涯学習",
+        updatedAt: "2026-06-14",
+        pageUrl:
+          "https://www.city.nerima.tokyo.jp/kusei/tokei/opendata/opendatasite/bunka/cultural_property.html",
+        path: "datasets/0000000037-cultural-property.json",
+        csvFileCount: 1,
+        rowCount: 223
+      })
+    ).toBe(false);
   });
 });
 

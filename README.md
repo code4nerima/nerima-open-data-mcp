@@ -240,11 +240,27 @@ npm run build
 npm run import:open-data
 ```
 
+通常の `npm run import:open-data` は差分更新です。既存の `catalog.json` と新しいオープンデータ一覧を比較し、データセットID、タイトル、分類、最終更新日、ページURLが変わっていないデータセットは既存JSONを再利用します。全データセットを取り直したい場合は次を実行します。
+
+```bash
+npm run import:open-data -- --full
+```
+
 外部スケジューラーから直接呼ぶ場合:
 
 ```bash
 curl -X POST \
   -H "Authorization: Bearer $IMPORT_TOKEN" \
+  https://<your-app-name>.herokuapp.com/tasks/import-open-data
+```
+
+サーバー経由の通常インポートも差分更新です。フル更新したい場合はJSON bodyで `forceRefresh` を指定します。
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $IMPORT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"forceRefresh":true}' \
   https://<your-app-name>.herokuapp.com/tasks/import-open-data
 ```
 
@@ -254,7 +270,7 @@ curl -X POST \
 
 公式CSVキャッシュは取得時点の生成物なので、Gitには含めません。Herokuのslugにも含めず、GCSに保存します。
 
-インポート処理は、練馬区オープンデータサイトの「オープンデータ一覧（CSV）」とカテゴリページを起点に、CSV形式で公開されている各データセットページを巡回してページ内のCSVリンクを取得します。取得したCSVはJSON化して、GCS上の `nerima-open-data/cache/datasets/*.json` に保存し、最後に `nerima-open-data/cache/catalog.json` を更新します。
+インポート処理は、練馬区オープンデータサイトの「オープンデータ一覧（CSV）」とカテゴリページを起点に、CSV形式で公開されている各データセットページを巡回してページ内のCSVリンクを取得します。取得したCSVはJSON化して、GCS上の `nerima-open-data/cache/datasets/*.json` に保存し、最後に `nerima-open-data/cache/catalog.json` を更新します。差分更新では未変更データセットの既存JSONを再利用するため、毎回すべてのCSVを取得し直す必要はありません。
 
 キャッシュ生成結果の例:
 

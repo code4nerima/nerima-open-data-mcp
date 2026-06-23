@@ -290,51 +290,99 @@ async function fetchDataSet(catalogRow: CatalogRow, fetchedAt: string): Promise<
   };
 }
 
+type ManifestDataSet = OpenDataCacheManifest["datasets"][number];
+
+function manifestEntryFromDataSet(dataSet: CachedDataSet, relativePath: string): ManifestDataSet {
+  const rowCount = dataSet.files.reduce((sum, file) => sum + file.rowCount, 0);
+
+  return {
+    id: dataSet.id,
+    title: dataSet.title,
+    category: dataSet.category,
+    updatedAt: dataSet.updatedAt,
+    pageUrl: dataSet.pageUrl,
+    path: relativePath,
+    csvFileCount: dataSet.files.length,
+    rowCount
+  };
+}
+
+export function canReuseManifestEntry(row: CatalogRow, existing: ManifestDataSet): boolean {
+  return (
+    existing.id === row.id &&
+    existing.title === row.title &&
+    existing.category === row.category &&
+    existing.updatedAt === row.updatedAt &&
+    (!existing.pageUrl || existing.pageUrl === row.pageUrl)
+  );
+}
+
 export interface ImportOpenDataSummary {
   generatedAt: string;
   sourceCatalogUrl: string;
   datasetCount: number;
   csvFileCount: number;
   totalRowCount: number;
+  importedDatasetCount: number;
+  reusedDatasetCount: number;
+  skippedDatasetCount: number;
   rssNewsCount: number;
   garbageCollectionAreaCount: number;
 }
 
-export async function importOpenData(): Promise<ImportOpenDataSummary> {
+export interface ImportOpenDataOptions {
+  forceRefresh?: boolean;
+}
+
+export async function importOpenData(options: ImportOpenDataOptions = {}): Promise<ImportOpenDataSummary> {
   const generatedAt = new Date().toISOString();
   const catalogRows = await fetchCatalogRows();
   const cacheStore = getCacheStore();
+  const previousManifest = options.forceRefresh ? null : await cacheStore.readManifest();
+  const previousDataSetsById = new Map(previousManifest?.datasets.map((dataset) => [dataset.id, dataset]) ?? []);
 
-  await cacheStore.reset();
+  if (options.forceRefresh || !previousManifest) {
+    await cacheStore.reset();
+  }
 
   const manifestDatasets: OpenDataCacheManifest["datasets"] = [];
   let csvFileCount = 0;
   let totalRowCount = 0;
+  let importedDatasetCount = 0;
+  let reusedDatasetCount = 0;
+  let skippedDatasetCount = 0;
 
   for (const row of catalogRows) {
     try {
+      const previousDataSet = previousDataSetsById.get(row.id);
+      if (previousDataSet && canReuseManifestEntry(row, previousDataSet)) {
+        manifestDatasets.push({
+          ...previousDataSet,
+          pageUrl: row.pageUrl
+        });
+        csvFileCount += previousDataSet.csvFileCount;
+        totalRowCount += previousDataSet.rowCount;
+        reusedDatasetCount += 1;
+        continue;
+      }
+
       const dataSet = await fetchDataSet(row, generatedAt);
       if (!dataSet) {
+        skippedDatasetCount += 1;
         continue;
       }
 
       const fileName = `${row.id}-${slugify(path.basename(row.pageUrl, ".html") || row.title)}.json`;
       const relativePath = await cacheStore.writeDataSet(fileName, dataSet);
-      const rowCount = dataSet.files.reduce((sum, file) => sum + file.rowCount, 0);
+      const manifestEntry = manifestEntryFromDataSet(dataSet, relativePath);
 
-      csvFileCount += dataSet.files.length;
-      totalRowCount += rowCount;
+      csvFileCount += manifestEntry.csvFileCount;
+      totalRowCount += manifestEntry.rowCount;
+      importedDatasetCount += 1;
 
-      manifestDatasets.push({
-        id: dataSet.id,
-        title: dataSet.title,
-        category: dataSet.category,
-        updatedAt: dataSet.updatedAt,
-        path: relativePath,
-        csvFileCount: dataSet.files.length,
-        rowCount
-      });
+      manifestDatasets.push(manifestEntry);
     } catch (error) {
+      skippedDatasetCount += 1;
       console.warn(`Skipping dataset ${row.id} ${row.title}:`, error);
     }
   }
@@ -384,6 +432,9 @@ export async function importOpenData(): Promise<ImportOpenDataSummary> {
     datasetCount: manifest.datasetCount,
     csvFileCount: manifest.csvFileCount,
     totalRowCount: manifest.totalRowCount,
+    importedDatasetCount,
+    reusedDatasetCount,
+    skippedDatasetCount,
     rssNewsCount,
     garbageCollectionAreaCount
   };
