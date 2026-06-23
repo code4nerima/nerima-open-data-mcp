@@ -1,5 +1,6 @@
 import path from "node:path";
-import { decodeCsvBuffer, parseCsvRows } from "./csv.js";
+import { Readable } from "node:stream";
+import { decodeCsvBuffer, parseCsvRows, parseCsvRowsFromStream } from "./csv.js";
 import { getCacheStore, type CacheStore } from "./cacheStore.js";
 import type {
   CachedCsvChunk,
@@ -113,6 +114,24 @@ async function fetchBuffer(url: string): Promise<Buffer> {
 
 async function fetchText(url: string): Promise<string> {
   return decodeCsvBuffer(await fetchBuffer(url));
+}
+
+async function fetchStream(url: string): Promise<NodeJS.ReadableStream> {
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "nerima-open-data-mcp/0.1.0 (+https://www.city.nerima.tokyo.jp/)"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+  }
+
+  if (!response.body) {
+    throw new Error(`Failed to fetch ${url}: response body is empty`);
+  }
+
+  return Readable.fromWeb(response.body as unknown as import("node:stream/web").ReadableStream);
 }
 
 export function extractCsvLinks(pageHtml: string, pageUrl: string): Array<{ title: string; url: string }> {
@@ -260,13 +279,16 @@ async function fetchCsvFile(
   fileIndex: number,
   link: { title: string; url: string }
 ): Promise<CachedCsvFile> {
-  const csvText = await fetchText(link.url);
-  const rows = parseCsvRows(csvText);
   const chunkSize = csvChunkRowCount();
   const chunks: CachedCsvChunk[] = [];
+  let chunkRows: Record<string, string>[] = [];
+  let rowCount = 0;
 
-  for (let index = 0; index < rows.length; index += chunkSize) {
-    const chunkRows = rows.slice(index, index + chunkSize);
+  async function flushChunk(): Promise<void> {
+    if (chunkRows.length === 0) {
+      return;
+    }
+
     const chunkIndex: number = chunks.length + 1;
     const chunkPath: string = [
       "dataset-files",
@@ -283,13 +305,25 @@ async function fetchCsvFile(
       path: chunkPath,
       rowCount: chunkRows.length
     });
+    chunkRows = [];
   }
+
+  await parseCsvRowsFromStream(await fetchStream(link.url), async (row) => {
+    chunkRows.push(row);
+    rowCount += 1;
+
+    if (chunkRows.length >= chunkSize) {
+      await flushChunk();
+    }
+  });
+
+  await flushChunk();
 
   return {
     title: link.title,
     url: link.url,
     chunks,
-    rowCount: rows.length
+    rowCount
   };
 }
 

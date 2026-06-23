@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { Readable } from "node:stream";
 import { canReuseManifestEntry } from "../data/openDataImport.js";
+import { parseCsvRowsFromStream } from "../data/csv.js";
 import { parseGarbageCollectionAreas } from "../data/garbageCollectionImport.js";
 import { normalizeText } from "../data/normalize.js";
 import { parseRssNewsItems } from "../data/rssNewsImport.js";
@@ -36,6 +38,21 @@ const facilities: Facility[] = [
 describe("normalizeText", () => {
   it("normalizes width, case, and whitespace", () => {
     expect(normalizeText(" Ａ Bｃ ")).toBe("abc");
+  });
+});
+
+describe("parseCsvRowsFromStream", () => {
+  it("parses CSV rows without collecting the whole file first", async () => {
+    const rows: Record<string, string>[] = [];
+
+    await parseCsvRowsFromStream(Readable.from(["名称,所在地\n石神井城跡,石神井台\n練馬大根碑,練馬\n"]), async (row) => {
+      rows.push(row);
+    });
+
+    expect(rows).toEqual([
+      { 名称: "石神井城跡", 所在地: "石神井台" },
+      { 名称: "練馬大根碑", 所在地: "練馬" }
+    ]);
   });
 });
 
