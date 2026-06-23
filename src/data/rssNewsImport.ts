@@ -1,4 +1,5 @@
 import { decodeCsvBuffer } from "./csv.js";
+import { fetchOfficial } from "./fetchOfficial.js";
 import type { RssNewsItem } from "../types/openData.js";
 
 export const NERIMA_RSS_NEWS_URL = "https://www.city.nerima.tokyo.jp/rss_news.xml";
@@ -58,11 +59,7 @@ export function parseRssNewsItems(xml: string): RssNewsItem[] {
 }
 
 export async function fetchRssNewsItems(): Promise<RssNewsItem[]> {
-  const response = await fetch(NERIMA_RSS_NEWS_URL, {
-    headers: {
-      "user-agent": "nerima-open-data-mcp/0.1.0 (+https://www.city.nerima.tokyo.jp/)"
-    }
-  });
+  const response = await fetchOfficial(NERIMA_RSS_NEWS_URL);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch ${NERIMA_RSS_NEWS_URL}: ${response.status} ${response.statusText}`);

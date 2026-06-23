@@ -1,6 +1,7 @@
 import path from "node:path";
 import { Readable } from "node:stream";
 import { decodeCsvBuffer, parseCsvRows, parseCsvRowsFromStream } from "./csv.js";
+import { fetchOfficial } from "./fetchOfficial.js";
 import { getCacheStore, type CacheStore } from "./cacheStore.js";
 import type {
   CachedCsvChunk,
@@ -99,11 +100,7 @@ function catalogRowFromPage(pageUrl: string, pageHtml: string, fallbackCategory 
 }
 
 async function fetchBuffer(url: string): Promise<Buffer> {
-  const response = await fetch(url, {
-    headers: {
-      "user-agent": "nerima-open-data-mcp/0.1.0 (+https://www.city.nerima.tokyo.jp/)"
-    }
-  });
+  const response = await fetchOfficial(url);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
@@ -117,11 +114,7 @@ async function fetchText(url: string): Promise<string> {
 }
 
 async function fetchStream(url: string): Promise<NodeJS.ReadableStream> {
-  const response = await fetch(url, {
-    headers: {
-      "user-agent": "nerima-open-data-mcp/0.1.0 (+https://www.city.nerima.tokyo.jp/)"
-    }
-  });
+  const response = await fetchOfficial(url);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
@@ -284,6 +277,8 @@ async function fetchCsvFile(
   let chunkRows: Record<string, string>[] = [];
   let rowCount = 0;
 
+  console.log(`Import CSV start: dataset=${datasetId} file=${fileIndex + 1} title="${link.title}" url=${link.url}`);
+
   async function flushChunk(): Promise<void> {
     if (chunkRows.length === 0) {
       return;
@@ -305,6 +300,9 @@ async function fetchCsvFile(
       path: chunkPath,
       rowCount: chunkRows.length
     });
+    if (chunks.length % 10 === 0) {
+      console.log(`Import CSV progress: dataset=${datasetId} file=${fileIndex + 1} chunks=${chunks.length} rows=${rowCount}`);
+    }
     chunkRows = [];
   }
 
@@ -318,6 +316,8 @@ async function fetchCsvFile(
   });
 
   await flushChunk();
+
+  console.log(`Import CSV done: dataset=${datasetId} file=${fileIndex + 1} chunks=${chunks.length} rows=${rowCount}`);
 
   return {
     title: link.title,
@@ -413,13 +413,17 @@ export interface ImportOpenDataOptions {
 
 export async function importOpenData(options: ImportOpenDataOptions = {}): Promise<ImportOpenDataSummary> {
   const generatedAt = new Date().toISOString();
+  console.log(`Open data import start: generatedAt=${generatedAt} forceRefresh=${options.forceRefresh === true}`);
   const catalogRows = await fetchCatalogRows();
+  console.log(`Open data catalog loaded: rows=${catalogRows.length}`);
   const cacheStore = getCacheStore();
   const previousManifest = options.forceRefresh ? null : await cacheStore.readManifest();
   const previousDataSetsById = new Map(previousManifest?.datasets.map((dataset) => [dataset.id, dataset]) ?? []);
 
   if (options.forceRefresh || !previousManifest) {
+    console.log("Open data cache reset start");
     await cacheStore.reset();
+    console.log("Open data cache reset done");
   }
 
   const manifestDatasets: OpenDataCacheManifest["datasets"] = [];
@@ -429,10 +433,12 @@ export async function importOpenData(options: ImportOpenDataOptions = {}): Promi
   let reusedDatasetCount = 0;
   let skippedDatasetCount = 0;
 
-  for (const row of catalogRows) {
+  for (const [index, row] of catalogRows.entries()) {
+    const ordinal = `${index + 1}/${catalogRows.length}`;
     try {
       const previousDataSet = previousDataSetsById.get(row.id);
       if (previousDataSet && canReuseManifestEntry(row, previousDataSet)) {
+        console.log(`Reuse dataset ${ordinal}: ${row.id} "${row.title}" rows=${previousDataSet.rowCount}`);
         manifestDatasets.push({
           ...previousDataSet,
           pageUrl: row.pageUrl
@@ -443,9 +449,11 @@ export async function importOpenData(options: ImportOpenDataOptions = {}): Promi
         continue;
       }
 
+      console.log(`Import dataset start ${ordinal}: ${row.id} "${row.title}"`);
       const dataSet = await fetchDataSet(cacheStore, row, generatedAt);
       if (!dataSet) {
         skippedDatasetCount += 1;
+        console.warn(`Skip dataset ${ordinal}: ${row.id} "${row.title}" no CSV files`);
         continue;
       }
 
@@ -458,6 +466,9 @@ export async function importOpenData(options: ImportOpenDataOptions = {}): Promi
       importedDatasetCount += 1;
 
       manifestDatasets.push(manifestEntry);
+      console.log(
+        `Import dataset done ${ordinal}: ${row.id} "${row.title}" files=${manifestEntry.csvFileCount} rows=${manifestEntry.rowCount}`
+      );
     } catch (error) {
       skippedDatasetCount += 1;
       console.warn(`Skipping dataset ${row.id} ${row.title}:`, error);
@@ -475,6 +486,7 @@ export async function importOpenData(options: ImportOpenDataOptions = {}): Promi
 
   let rssNewsCount = 0;
   try {
+    console.log("Import RSS news start");
     const newsItems = await fetchRssNewsItems();
     rssNewsCount = newsItems.length;
     await cacheStore.writeNewsItems({
@@ -483,12 +495,14 @@ export async function importOpenData(options: ImportOpenDataOptions = {}): Promi
       itemCount: newsItems.length,
       items: newsItems
     });
+    console.log(`Import RSS news done: items=${rssNewsCount}`);
   } catch (error) {
     console.warn(`Skipping RSS news ${NERIMA_RSS_NEWS_URL}:`, error);
   }
 
   let garbageCollectionAreaCount = 0;
   try {
+    console.log("Import garbage collection start");
     const garbageCollectionAreas = await fetchGarbageCollectionAreas();
     garbageCollectionAreaCount = garbageCollectionAreas.length;
     await cacheStore.writeGarbageCollection({
@@ -497,11 +511,16 @@ export async function importOpenData(options: ImportOpenDataOptions = {}): Promi
       itemCount: garbageCollectionAreas.length,
       items: garbageCollectionAreas
     });
+    console.log(`Import garbage collection done: items=${garbageCollectionAreaCount}`);
   } catch (error) {
     console.warn(`Skipping garbage collection days ${NERIMA_GARBAGE_COLLECTION_INDEX_URL}:`, error);
   }
 
+  console.log("Open data manifest write start");
   await cacheStore.writeManifest(manifest);
+  console.log(
+    `Open data import done: datasets=${manifest.datasetCount} imported=${importedDatasetCount} reused=${reusedDatasetCount} skipped=${skippedDatasetCount} csvFiles=${manifest.csvFileCount} rows=${manifest.totalRowCount}`
+  );
 
   return {
     generatedAt,

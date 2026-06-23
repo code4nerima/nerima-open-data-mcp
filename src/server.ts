@@ -450,23 +450,31 @@ export function createApp(): express.Express {
     }
   });
 
+  function validateTaskToken(req: Request, res: Response): boolean {
+    const expectedToken = process.env.IMPORT_TOKEN;
+    if (!expectedToken) {
+      res.status(503).json({
+        ok: false,
+        error: "IMPORT_TOKEN is not configured."
+      });
+      return false;
+    }
+
+    const providedToken = req.header("authorization")?.replace(/^Bearer\s+/i, "");
+    if (providedToken !== expectedToken) {
+      res.status(401).json({
+        ok: false,
+        error: "Unauthorized."
+      });
+      return false;
+    }
+
+    return true;
+  }
+
   app.post("/tasks/import-open-data", async (req, res, next) => {
     try {
-      const expectedToken = process.env.IMPORT_TOKEN;
-      if (!expectedToken) {
-        res.status(503).json({
-          ok: false,
-          error: "IMPORT_TOKEN is not configured."
-        });
-        return;
-      }
-
-      const providedToken = req.header("authorization")?.replace(/^Bearer\s+/i, "");
-      if (providedToken !== expectedToken) {
-        res.status(401).json({
-          ok: false,
-          error: "Unauthorized."
-        });
+      if (!validateTaskToken(req, res)) {
         return;
       }
 
@@ -481,6 +489,18 @@ export function createApp(): express.Express {
     } catch (error) {
       next(error);
     }
+  });
+
+  app.post("/tasks/clear-cache", (req, res) => {
+    if (!validateTaskToken(req, res)) {
+      return;
+    }
+
+    clearDataSetCache();
+    res.json({
+      ok: true,
+      clearedAt: new Date().toISOString()
+    });
   });
 
   app.options("/mcp", (_req: Request, res: Response) => {

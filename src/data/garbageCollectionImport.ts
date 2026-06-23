@@ -1,4 +1,5 @@
 import { decodeCsvBuffer } from "./csv.js";
+import { fetchOfficial } from "./fetchOfficial.js";
 import type { GarbageCollectionArea } from "../types/openData.js";
 
 export const NERIMA_GARBAGE_COLLECTION_INDEX_URL =
@@ -28,11 +29,7 @@ function idPart(value: string): string {
 }
 
 async function fetchHtml(url: string): Promise<string> {
-  const response = await fetch(url, {
-    headers: {
-      "user-agent": "nerima-open-data-mcp/0.1.0 (+https://www.city.nerima.tokyo.jp/)"
-    }
-  });
+  const response = await fetchOfficial(url);
 
   if (!response.ok) {
     throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);

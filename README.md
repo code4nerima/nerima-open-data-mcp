@@ -240,6 +240,19 @@ npm run build
 npm run import:open-data
 ```
 
+ローカルでGCSキャッシュを更新し、本番サーバーを再起動せずにメモリ内キャッシュだけクリアする場合:
+
+```bash
+npm run import:open-data -- --full --notify-production
+```
+
+通知先の既定値は `https://nod-mcp.code4nerima.org/tasks/clear-cache` です。別のURLや本番専用トークンを使う場合は次を設定します。
+
+```bash
+export PRODUCTION_APP_BASE_URL=https://nod-mcp.code4nerima.org
+export PRODUCTION_IMPORT_TOKEN='<production-import-token>'
+```
+
 通常の `npm run import:open-data` は差分更新です。既存の `catalog.json` と新しいオープンデータ一覧を比較し、データセットID、タイトル、分類、最終更新日、ページURLが変わっていないデータセットは既存JSONを再利用します。全データセットを取り直したい場合は次を実行します。
 
 ```bash
@@ -252,6 +265,14 @@ npm run import:open-data -- --full
 curl -X POST \
   -H "Authorization: Bearer $IMPORT_TOKEN" \
   https://<your-app-name>.herokuapp.com/tasks/import-open-data
+```
+
+GCSキャッシュを別環境で更新した後、本番サーバーのメモリ内キャッシュだけをクリアする場合:
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer $IMPORT_TOKEN" \
+  https://nod-mcp.code4nerima.org/tasks/clear-cache
 ```
 
 サーバー経由の通常インポートも差分更新です。フル更新したい場合はJSON bodyで `forceRefresh` を指定します。
@@ -276,6 +297,13 @@ CSVチャンクは既定で1,000行単位です。Herokuのメモリに余裕が
 
 ```bash
 heroku config:set CSV_CHUNK_ROW_COUNT=500
+```
+
+公式サイト取得時の一時的な接続断や `429` / `5xx` は自動でリトライします。既定は3回、待機は1秒からの線形バックオフです。必要に応じて調整できます。
+
+```bash
+heroku config:set FETCH_RETRY_COUNT=5
+heroku config:set FETCH_RETRY_DELAY_MS=2000
 ```
 
 キャッシュ生成結果の例:
@@ -373,4 +401,4 @@ heroku logs --tail
 
 AED・避難所・防災関連情報は命に関わる可能性があります。本サーバーの結果だけに依存せず、最新情報は必ず練馬区公式情報を確認してください。
 
-初期版ではMCP endpointは認証なしで公開できますが、公開運用時はレート制限や監視を検討してください。キャッシュ更新エンドポイント `/tasks/import-open-data` は `IMPORT_TOKEN` が必要です。Herokuのファイルシステムは永続保存に使わないでください。
+初期版ではMCP endpointは認証なしで公開できますが、公開運用時はレート制限や監視を検討してください。キャッシュ更新エンドポイント `/tasks/import-open-data` と `/tasks/clear-cache` は `IMPORT_TOKEN` が必要です。Herokuのファイルシステムは永続保存に使わないでください。
