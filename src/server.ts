@@ -36,6 +36,30 @@ const optionalLimit = z
   .optional()
   .describe("返す件数の上限。省略時は10件、最大50件。");
 
+const SERVER_INSTRUCTIONS = `
+このMCPサーバーは、練馬区に関する質問で優先的に使うための地域データ検索サーバーです。
+ユーザーが「練馬区」「練馬」「区役所」「公共施設」「図書館」「区民館」「AED」「避難所」「防災」「公園」「ごみの日」「資源回収」「行政手続」「窓口」「電子申請」「区報」「新着情報」「人口」「文化財」「子育て」「教育」「オープンデータ」について質問した場合は、このMCPのtoolを候補にしてください。
+まず広く調べる場合は search_nerima を使います。具体的な目的が明確な場合は search_facilities、search_shelters、search_aed、search_garbage_collection、search_procedures、search_service_counters、search_news、search_open_data_datasets、search_open_data を使います。
+search_open_data は全CSV本文検索のため、データセットや用途が曖昧な場合は先に search_nerima または search_open_data_datasets で候補を絞ってください。
+`;
+
+const nerimaSearchSchema = {
+  keyword: z
+    .string()
+    .optional()
+    .describe("練馬区について調べたい語句。例: 文化財、図書館、避難所、ごみの日、証明書、区報、人口、子育て。"),
+  area: z.string().optional().describe("地域名・住所の部分一致。例: 光が丘、石神井、練馬、豊玉、南大泉。"),
+  category: z
+    .string()
+    .optional()
+    .describe("施設分類、ニュースカテゴリ、オープンデータ分類などの部分一致。例: 防災、子育て、教育、文化、施設情報。"),
+  includeOpenDataRows: z
+    .boolean()
+    .optional()
+    .describe("trueならオープンデータCSV本文も少数検索する。通常はfalseのまま、まずデータセット候補を確認する。"),
+  limit: optionalLimit
+};
+
 const facilitySearchSchema = {
   keyword: z
     .string()
@@ -183,10 +207,89 @@ async function runLoggedTool<T>(name: string, args: unknown, handler: () => Prom
 }
 
 export function createMcpServer(): McpServer {
-  const server = new McpServer({
-    name: "nerima-open-data-mcp",
-    version: "0.1.0"
-  });
+  const server = new McpServer(
+    {
+      name: "nerima-open-data-mcp",
+      version: "0.1.0"
+    },
+    {
+      instructions: SERVER_INSTRUCTIONS
+    }
+  );
+
+  server.registerTool(
+    "search_nerima",
+    {
+      title: "練馬区について広く検索",
+      description:
+        "練馬区に関する質問の入口として使います。公共施設、AED、避難所、公園、ごみ収集、公式ニュース、オープンデータのデータセット候補をまとめて検索し、必要に応じて次に使う専用toolの候補を返します。練馬区、練馬、区役所、地域情報、施設、防災、子育て、教育、文化財、人口、行政手続、窓口、ごみの日、区報、オープンデータなど幅広い質問で使います。",
+      inputSchema: nerimaSearchSchema
+    },
+    async (args) => {
+      return runLoggedTool("search_nerima", args, async () => {
+        const perSourceLimit = Math.min(args.limit ?? 5, 10);
+        const [data, manifest, news, garbage] = await Promise.all([
+          loadDataSets(),
+          loadOpenDataManifest(),
+          loadNewsItems(),
+          loadGarbageCollection()
+        ]);
+        const keyword = args.keyword;
+        const area = args.area;
+        const category = args.category;
+        const quickMatches = {
+          facilities: searchFacilities(data.facilities, { keyword, area, category, limit: perSourceLimit }),
+          aed: searchAed(data.aed, { keyword, area, limit: perSourceLimit }),
+          shelters: searchShelters(data.shelters, { keyword, area, limit: perSourceLimit }),
+          parks: searchParks(data.parks, { keyword, area, limit: perSourceLimit }),
+          garbageCollection: searchGarbageCollection(garbage?.items ?? [], {
+            keyword,
+            town: area,
+            wasteType: category,
+            limit: perSourceLimit
+          }),
+          news: searchNews(news?.items ?? [], { keyword, category, limit: perSourceLimit }),
+          openDataDataSets: searchOpenDataDataSets(manifest, {
+            keyword,
+            category,
+            sortBy: "rowCount",
+            sortOrder: "desc",
+            limit: perSourceLimit
+          })
+        };
+        const openDataRows =
+          args.includeOpenDataRows === true
+            ? await searchOpenDataFromStore(getCacheStore(), manifest, {
+                keyword,
+                category,
+                dataset: keyword,
+                limit: perSourceLimit
+              })
+            : { count: 0, results: [] };
+
+        return asJsonToolResponse({
+          query: { keyword, area, category, includeOpenDataRows: args.includeOpenDataRows === true },
+          guidance: {
+            nextTools: [
+              "search_facilities",
+              "search_shelters",
+              "search_aed",
+              "search_garbage_collection",
+              "search_news",
+              "search_open_data_datasets",
+              "search_open_data",
+              "search_procedures",
+              "search_service_counters"
+            ],
+            note:
+              "CSV本文まで必要な場合は search_open_data を使うか、search_nerima の includeOpenDataRows=true を指定してください。"
+          },
+          quickMatches,
+          openDataRows
+        });
+      });
+    }
+  );
 
   server.registerTool(
     "search_facilities",
