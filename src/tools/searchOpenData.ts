@@ -39,6 +39,37 @@ function rowValues(row: Record<string, string>): string[] {
   return Object.entries(row).flatMap(([key, value]) => [key, value]);
 }
 
+function pushMatchingRows(
+  results: OpenDataSearchResultItem[],
+  dataset: CachedDataSet,
+  file: CachedDataSet["files"][number],
+  rows: Record<string, string>[],
+  args: OpenDataSearchArgs,
+  limit: number
+): boolean {
+  for (const row of rows) {
+    if (!anyFieldIncludes(rowValues(row), args.keyword)) {
+      continue;
+    }
+
+    results.push({
+      datasetId: dataset.id,
+      datasetTitle: dataset.title,
+      category: dataset.category,
+      sourceUrl: dataset.pageUrl,
+      fileTitle: file.title,
+      fileUrl: file.url,
+      row
+    });
+
+    if (results.length >= limit) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function searchOpenData(
   datasets: CachedDataSet[],
   args: OpenDataSearchArgs
@@ -56,24 +87,9 @@ export function searchOpenData(
     }
 
     for (const file of dataset.files) {
-      for (const row of file.rows) {
-        if (!anyFieldIncludes(rowValues(row), args.keyword)) {
-          continue;
-        }
-
-        results.push({
-          datasetId: dataset.id,
-          datasetTitle: dataset.title,
-          category: dataset.category,
-          sourceUrl: dataset.pageUrl,
-          fileTitle: file.title,
-          fileUrl: file.url,
-          row
-        });
-
-        if (results.length >= limit) {
-          return { count: results.length, results };
-        }
+      const reachedLimit = pushMatchingRows(results, dataset, file, file.rows ?? [], args, limit);
+      if (reachedLimit) {
+        return { count: results.length, results };
       }
     }
   }
@@ -120,11 +136,32 @@ export async function searchOpenDataFromStore(
       continue;
     }
 
-    const partial = searchOpenData([dataset], {
-      ...args,
-      limit: limit - results.length
-    });
-    results.push(...partial.results);
+    if (!anyFieldIncludes([dataset.title, dataset.summary, dataset.keywords], args.dataset)) {
+      continue;
+    }
+
+    for (const file of dataset.files) {
+      if (file.rows) {
+        if (pushMatchingRows(results, dataset, file, file.rows, args, limit)) {
+          break;
+        }
+        continue;
+      }
+
+      for (const chunk of file.chunks ?? []) {
+        const rowChunk = await cacheStore.readCsvRowChunk(chunk.path);
+        if (!rowChunk) {
+          continue;
+        }
+        if (pushMatchingRows(results, dataset, file, rowChunk.rows, args, limit)) {
+          break;
+        }
+      }
+
+      if (results.length >= limit) {
+        break;
+      }
+    }
 
     if (results.length >= limit) {
       break;

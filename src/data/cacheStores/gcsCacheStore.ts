@@ -1,6 +1,7 @@
 import { Storage, type UploadOptions } from "@google-cloud/storage";
 import { GoogleAuth } from "google-auth-library";
 import type {
+  CachedCsvRowChunk,
   CachedDataSet,
   GarbageCollectionCache,
   OpenDataCacheManifest,
@@ -194,9 +195,17 @@ async function resetWithSignedUrls(bucketName: string, prefix: string): Promise<
   );
 
   if (manifest) {
-    await Promise.all(
-      manifest.datasets.map((dataset) => deleteObjectWithSignedUrl(bucketName, prefix, dataset.path))
+    const nestedPaths = await Promise.all(
+      manifest.datasets.map(async (dataset) => {
+        const cachedDataSet = await readJsonWithSignedUrl<CachedDataSet>(bucketName, prefix, dataset.path);
+        return [
+          dataset.path,
+          ...(cachedDataSet?.files ?? []).flatMap((file) => file.chunks?.map((chunk) => chunk.path) ?? [])
+        ];
+      })
     );
+    const paths = nestedPaths.flat();
+    await Promise.all(paths.map((path) => deleteObjectWithSignedUrl(bucketName, prefix, path)));
   }
 
   await deleteObjectWithSignedUrl(bucketName, prefix, RSS_NEWS_PATH);
@@ -235,6 +244,12 @@ export function createGcsCacheStore(): CacheStore {
       const requiredBucketName = requireBucketName();
       const relativePath = `datasets/${fileName}`;
       await uploadJson(requiredBucketName, prefix, relativePath, dataSet);
+      return relativePath;
+    },
+
+    async writeCsvRowChunk(relativePath: string, chunk: CachedCsvRowChunk): Promise<string> {
+      const requiredBucketName = requireBucketName();
+      await uploadJson(requiredBucketName, prefix, relativePath, chunk);
       return relativePath;
     },
 
@@ -293,6 +308,28 @@ export function createGcsCacheStore(): CacheStore {
         }
         if (isRetryableStorageError(error)) {
           return readJsonWithSignedUrl<CachedDataSet>(bucketName, prefix, relativePath);
+        }
+        throw error;
+      }
+    },
+
+    async readCsvRowChunk(relativePath: string): Promise<CachedCsvRowChunk | null> {
+      if (!bucketName) {
+        return null;
+      }
+
+      const storage = createStorage();
+      const file = storage.bucket(bucketName).file(objectName(prefix, relativePath));
+
+      try {
+        const [content] = await file.download();
+        return JSON.parse(content.toString("utf8")) as CachedCsvRowChunk;
+      } catch (error) {
+        if ((error as { code?: number }).code === 404) {
+          return null;
+        }
+        if (isRetryableStorageError(error)) {
+          return readJsonWithSignedUrl<CachedCsvRowChunk>(bucketName, prefix, relativePath);
         }
         throw error;
       }

@@ -12,7 +12,7 @@ function numberOrNull(value: string | undefined): number | null {
 
 function rowsFor(datasets: CachedDataSet[], title: string): Record<string, string>[] {
   const dataset = datasets.find((item) => item.title === title);
-  return dataset?.files.flatMap((file) => file.rows) ?? [];
+  return dataset?.files.flatMap((file) => file.rows ?? []) ?? [];
 }
 
 function address(row: Record<string, string>): string {

@@ -1,5 +1,6 @@
 import { anyFieldIncludes, includesNormalized, normalizeLimit } from "../data/normalize.js";
 import type { CacheStore } from "../data/cacheStore.js";
+import { hydrateCachedDataSet } from "../data/cacheHydration.js";
 import type { SearchResult } from "../types/facility.js";
 import type {
   CachedDataSet,
@@ -35,7 +36,7 @@ function buildServiceCounters(datasets: CachedDataSet[]): ServiceCounterInfo[] {
 
   for (const dataset of datasets.filter(isProcedureDataSet)) {
     for (const file of dataset.files) {
-      for (const row of file.rows) {
+      for (const row of file.rows ?? []) {
         const procedure = toProcedureInfo({ ...dataset, files: [file] }, row);
         const key = counterKey(procedure);
         const counter =
@@ -105,5 +106,5 @@ export async function searchServiceCountersFromStore(
     return { count: 0, results: [] };
   }
 
-  return searchServiceCounters([dataset], args);
+  return searchServiceCounters([await hydrateCachedDataSet(cacheStore, dataset)], args);
 }

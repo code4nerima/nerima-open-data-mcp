@@ -1,5 +1,6 @@
 import { anyFieldIncludes, includesNormalized, normalizeLimit } from "../data/normalize.js";
 import type { CacheStore } from "../data/cacheStore.js";
+import { hydrateCachedDataSet } from "../data/cacheHydration.js";
 import type { SearchResult } from "../types/facility.js";
 import type { CachedDataSet, OpenDataCacheManifest, ProcedureInfo } from "../types/openData.js";
 
@@ -43,7 +44,7 @@ export function searchProcedures(
 
   for (const dataset of datasets.filter(isProcedureDataSet)) {
     for (const file of dataset.files) {
-      for (const row of file.rows) {
+      for (const row of file.rows ?? []) {
         const item = toProcedureInfo({ ...dataset, files: [file] }, row);
 
         if (!includesNormalized(item.department, args.department)) {
@@ -108,5 +109,5 @@ export async function searchProceduresFromStore(
     return { count: 0, results: [] };
   }
 
-  return searchProcedures([dataset], args);
+  return searchProcedures([await hydrateCachedDataSet(cacheStore, dataset)], args);
 }

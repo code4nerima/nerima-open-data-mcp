@@ -8,6 +8,7 @@ import type {
   RssNewsCache
 } from "../types/openData.js";
 import { getCacheStore } from "./cacheStore.js";
+import { hydrateCachedDataSet } from "./cacheHydration.js";
 import {
   mapAedFromCache,
   mapFacilitiesFromCache,
@@ -135,7 +136,12 @@ async function loadToolDataSets(): Promise<{
   const cacheStore = getCacheStore();
   const targets = manifest.datasets.filter((dataset) => TOOL_DATASET_TITLES.includes(dataset.title));
   const datasets = (
-    await Promise.all(targets.map((dataset) => cacheStore.readDataSet(dataset.path)))
+    await Promise.all(
+      targets.map(async (dataset) => {
+        const cachedDataSet = await cacheStore.readDataSet(dataset.path);
+        return cachedDataSet ? hydrateCachedDataSet(cacheStore, cachedDataSet) : null;
+      })
+    )
   ).filter((dataset): dataset is CachedDataSet => Boolean(dataset));
 
   return { manifest, datasets };

@@ -8,7 +8,7 @@ import type { GarbageCollectionArea, RssNewsItem } from "../types/openData.js";
 import { searchFacilities } from "./searchFacilities.js";
 import { searchGarbageCollection } from "./searchGarbageCollection.js";
 import { searchNews } from "./searchNews.js";
-import { searchOpenDataDataSets } from "./searchOpenData.js";
+import { searchOpenDataDataSets, searchOpenDataFromStore } from "./searchOpenData.js";
 import { searchProcedures } from "./searchProcedures.js";
 import { searchServiceCounters } from "./searchServiceCounters.js";
 
@@ -125,6 +125,73 @@ describe("searchOpenDataDataSets", () => {
       "行政手続情報",
       "文化財一覧"
     ]);
+  });
+});
+
+describe("searchOpenDataFromStore", () => {
+  it("searches rows stored in chunks", async () => {
+    const manifest = {
+      generatedAt: "2026-06-22T00:00:00.000Z",
+      sourceCatalogUrl: "https://example.com/catalog.csv",
+      datasetCount: 1,
+      csvFileCount: 1,
+      totalRowCount: 2,
+      datasets: [
+        {
+          id: "0000000037",
+          title: "文化財一覧",
+          category: "文化・生涯学習",
+          updatedAt: "2026-06-15",
+          pageUrl: "https://example.com/cultural_property.html",
+          path: "datasets/cultural-property.json",
+          csvFileCount: 1,
+          rowCount: 2
+        }
+      ]
+    };
+    const cacheStore = {
+      async readDataSet() {
+        return {
+          id: "0000000037",
+          title: "文化財一覧",
+          summary: "登録・指定文化財",
+          keywords: "文化財",
+          category: "文化・生涯学習",
+          pageUrl: "https://example.com/cultural_property.html",
+          updatedAt: "2026-06-15",
+          license: "CC-BY",
+          fetchedAt: "2026-06-22T00:00:00.000Z",
+          files: [
+            {
+              title: "文化財一覧",
+              url: "https://example.com/cultural_property.csv",
+              chunks: [{ path: "dataset-files/0000000037/001/00001.json", rowCount: 2 }],
+              rowCount: 2
+            }
+          ]
+        };
+      },
+      async readCsvRowChunk() {
+        return {
+          rowCount: 2,
+          rows: [
+            { 名称: "石神井城跡", 所在地: "石神井台" },
+            { 名称: "練馬大根碑", 所在地: "練馬" }
+          ]
+        };
+      }
+    };
+
+    const result = await searchOpenDataFromStore(cacheStore as never, manifest, {
+      dataset: "文化財",
+      keyword: "石神井"
+    });
+
+    expect(result.count).toBe(1);
+    expect(result.results[0]).toMatchObject({
+      datasetTitle: "文化財一覧",
+      row: { 名称: "石神井城跡" }
+    });
   });
 });
 

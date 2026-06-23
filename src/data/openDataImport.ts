@@ -1,7 +1,13 @@
 import path from "node:path";
 import { decodeCsvBuffer, parseCsvRows } from "./csv.js";
-import { getCacheStore } from "./cacheStore.js";
-import type { CachedCsvFile, CachedDataSet, CatalogRow, OpenDataCacheManifest } from "../types/openData.js";
+import { getCacheStore, type CacheStore } from "./cacheStore.js";
+import type {
+  CachedCsvChunk,
+  CachedCsvFile,
+  CachedDataSet,
+  CatalogRow,
+  OpenDataCacheManifest
+} from "../types/openData.js";
 import { fetchRssNewsItems, NERIMA_RSS_NEWS_URL } from "./rssNewsImport.js";
 import {
   fetchGarbageCollectionAreas,
@@ -18,6 +24,12 @@ export const NERIMA_OPEN_DATA_LIST_URL = new URL(
 const CSV_LINK_PATTERN = /<a\b[^>]*href=["']([^"']+\.csv(?:\?[^"']*)?)["'][^>]*>(.*?)<\/a>/gis;
 const PAGE_LINK_PATTERN = /<a\b[^>]*href=["']([^"']+\.html(?:\?[^"']*)?)["'][^>]*>(.*?)<\/a>/gis;
 const OPEN_DATA_PAGE_PREFIX = new URL(NERIMA_OPEN_DATA_BASE_URL).pathname;
+const DEFAULT_CSV_CHUNK_ROW_COUNT = 1000;
+
+function csvChunkRowCount(): number {
+  const value = Number(process.env.CSV_CHUNK_ROW_COUNT);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_CSV_CHUNK_ROW_COUNT;
+}
 
 function stripHtml(value: string): string {
   return value
@@ -242,19 +254,50 @@ export async function fetchCatalogRows(): Promise<CatalogRow[]> {
   return [...rowsByUrl.values()];
 }
 
-async function fetchCsvFile(link: { title: string; url: string }): Promise<CachedCsvFile> {
+async function fetchCsvFile(
+  cacheStore: CacheStore,
+  datasetId: string,
+  fileIndex: number,
+  link: { title: string; url: string }
+): Promise<CachedCsvFile> {
   const csvText = await fetchText(link.url);
   const rows = parseCsvRows(csvText);
+  const chunkSize = csvChunkRowCount();
+  const chunks: CachedCsvChunk[] = [];
+
+  for (let index = 0; index < rows.length; index += chunkSize) {
+    const chunkRows = rows.slice(index, index + chunkSize);
+    const chunkIndex: number = chunks.length + 1;
+    const chunkPath: string = [
+      "dataset-files",
+      datasetId,
+      `${String(fileIndex + 1).padStart(3, "0")}-${slugify(path.basename(new URL(link.url).pathname, ".csv") || link.title)}`,
+      `${String(chunkIndex).padStart(5, "0")}.json`
+    ].join("/");
+
+    await cacheStore.writeCsvRowChunk(chunkPath, {
+      rows: chunkRows,
+      rowCount: chunkRows.length
+    });
+    chunks.push({
+      path: chunkPath,
+      rowCount: chunkRows.length
+    });
+  }
 
   return {
     title: link.title,
     url: link.url,
-    rows,
+    chunks,
     rowCount: rows.length
   };
 }
 
-async function fetchDataSet(catalogRow: CatalogRow, fetchedAt: string): Promise<CachedDataSet | null> {
+async function fetchDataSet(
+  cacheStore: CacheStore,
+  catalogRow: CatalogRow,
+  fetchedAt: string
+): Promise<CachedDataSet | null> {
   const pageUrl = await resolveDataSetPageUrl(catalogRow);
   const pageHtml = await fetchText(pageUrl);
   const csvLinks = extractCsvLinks(pageHtml, pageUrl);
@@ -264,9 +307,9 @@ async function fetchDataSet(catalogRow: CatalogRow, fetchedAt: string): Promise<
   }
 
   const files: CachedCsvFile[] = [];
-  for (const link of csvLinks) {
+  for (const [index, link] of csvLinks.entries()) {
     try {
-      files.push(await fetchCsvFile(link));
+      files.push(await fetchCsvFile(cacheStore, catalogRow.id, index, link));
     } catch (error) {
       console.warn(`Skipping CSV ${link.url}:`, error);
     }
@@ -366,7 +409,7 @@ export async function importOpenData(options: ImportOpenDataOptions = {}): Promi
         continue;
       }
 
-      const dataSet = await fetchDataSet(row, generatedAt);
+      const dataSet = await fetchDataSet(cacheStore, row, generatedAt);
       if (!dataSet) {
         skippedDatasetCount += 1;
         continue;

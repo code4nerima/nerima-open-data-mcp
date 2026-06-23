@@ -270,7 +270,13 @@ curl -X POST \
 
 公式CSVキャッシュは取得時点の生成物なので、Gitには含めません。Herokuのslugにも含めず、GCSに保存します。
 
-インポート処理は、練馬区オープンデータサイトの「オープンデータ一覧（CSV）」とカテゴリページを起点に、CSV形式で公開されている各データセットページを巡回してページ内のCSVリンクを取得します。取得したCSVはJSON化して、GCS上の `nerima-open-data/cache/datasets/*.json` に保存し、最後に `nerima-open-data/cache/catalog.json` を更新します。差分更新では未変更データセットの既存JSONを再利用するため、毎回すべてのCSVを取得し直す必要はありません。
+インポート処理は、練馬区オープンデータサイトの「オープンデータ一覧（CSV）」とカテゴリページを起点に、CSV形式で公開されている各データセットページを巡回してページ内のCSVリンクを取得します。取得したCSVは行データを `nerima-open-data/cache/dataset-files/*/*.json` にチャンク保存し、データセット本体の `nerima-open-data/cache/datasets/*.json` にはメタデータとチャンク参照を保存します。最後に `nerima-open-data/cache/catalog.json` を更新します。差分更新では未変更データセットの既存JSONを再利用するため、毎回すべてのCSVを取得し直す必要はありません。
+
+CSVチャンクは既定で1,000行単位です。Herokuのメモリに余裕がない場合は小さくできます。
+
+```bash
+heroku config:set CSV_CHUNK_ROW_COUNT=500
+```
 
 キャッシュ生成結果の例:
 
@@ -296,6 +302,7 @@ GCSに置くオブジェクト:
 ```text
 gs://<bucket>/nerima-open-data/cache/catalog.json
 gs://<bucket>/nerima-open-data/cache/datasets/*.json
+gs://<bucket>/nerima-open-data/cache/dataset-files/**/*.json
 gs://<bucket>/nerima-open-data/cache/rss/news.json
 gs://<bucket>/nerima-open-data/cache/garbage/collection-days.json
 ```

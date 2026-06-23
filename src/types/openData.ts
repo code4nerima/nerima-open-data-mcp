@@ -16,6 +16,17 @@ export interface CatalogRow {
 export interface CachedCsvFile {
   title: string;
   url: string;
+  rows?: Record<string, string>[];
+  chunks?: CachedCsvChunk[];
+  rowCount: number;
+}
+
+export interface CachedCsvChunk {
+  path: string;
+  rowCount: number;
+}
+
+export interface CachedCsvRowChunk {
   rows: Record<string, string>[];
   rowCount: number;
 }
