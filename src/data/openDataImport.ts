@@ -26,7 +26,7 @@ export const NERIMA_OPEN_DATA_LIST_URL = new URL(
 const CSV_LINK_PATTERN = /<a\b[^>]*href=["']([^"']+\.csv(?:\?[^"']*)?)["'][^>]*>(.*?)<\/a>/gis;
 const PAGE_LINK_PATTERN = /<a\b[^>]*href=["']([^"']+\.html(?:\?[^"']*)?)["'][^>]*>(.*?)<\/a>/gis;
 const OPEN_DATA_PAGE_PREFIX = new URL(NERIMA_OPEN_DATA_BASE_URL).pathname;
-const DEFAULT_CSV_CHUNK_ROW_COUNT = 1000;
+const DEFAULT_CSV_CHUNK_ROW_COUNT = 5000;
 
 function csvChunkRowCount(): number {
   const value = Number(process.env.CSV_CHUNK_ROW_COUNT);

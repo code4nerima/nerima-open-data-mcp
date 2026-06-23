@@ -293,10 +293,16 @@ curl -X POST \
 
 インポート処理は、練馬区オープンデータサイトの「オープンデータ一覧（CSV）」とカテゴリページを起点に、CSV形式で公開されている各データセットページを巡回してページ内のCSVリンクを取得します。取得したCSVは行データを `nerima-open-data/cache/dataset-files/*/*.json` にチャンク保存し、データセット本体の `nerima-open-data/cache/datasets/*.json` にはメタデータとチャンク参照を保存します。最後に `nerima-open-data/cache/catalog.json` を更新します。差分更新では未変更データセットの既存JSONを再利用するため、毎回すべてのCSVを取得し直す必要はありません。
 
-CSVチャンクは既定で1,000行単位です。Herokuのメモリに余裕がない場合は小さくできます。
+CSVチャンクは既定で5,000行単位です。CSVパースはストリーム処理なので、通常は検索時のGCS読み込み回数を減らすため大きめのchunkを推奨します。Herokuのメモリに余裕がない場合だけ小さくします。
 
 ```bash
-heroku config:set CSV_CHUNK_ROW_COUNT=500
+heroku config:set CSV_CHUNK_ROW_COUNT=5000
+```
+
+検索時のchunk読み込みは既定で4並列です。GCSへの同時アクセスを抑えたい場合は小さく、検索速度を優先したい場合は大きくできます。
+
+```bash
+heroku config:set SEARCH_CHUNK_READ_CONCURRENCY=4
 ```
 
 公式サイト取得時の一時的な接続断や `429` / `5xx` は自動でリトライします。既定は3回、待機は1秒からの線形バックオフです。必要に応じて調整できます。

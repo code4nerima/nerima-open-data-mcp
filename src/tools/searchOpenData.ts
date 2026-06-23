@@ -23,6 +23,13 @@ export interface OpenDataDataSetSearchArgs {
   limit?: number;
 }
 
+const DEFAULT_CHUNK_READ_CONCURRENCY = 4;
+
+function chunkReadConcurrency(): number {
+  const value = Number(process.env.SEARCH_CHUNK_READ_CONCURRENCY);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_CHUNK_READ_CONCURRENCY;
+}
+
 function toDataSetSummary(dataset: OpenDataCacheManifest["datasets"][number]): OpenDataDataSetSummary {
   return {
     id: dataset.id,
@@ -148,12 +155,23 @@ export async function searchOpenDataFromStore(
         continue;
       }
 
-      for (const chunk of file.chunks ?? []) {
-        const rowChunk = await cacheStore.readCsvRowChunk(chunk.path);
-        if (!rowChunk) {
-          continue;
+      const chunks = file.chunks ?? [];
+      const concurrency = chunkReadConcurrency();
+      for (let index = 0; index < chunks.length; index += concurrency) {
+        const rowChunks = await Promise.all(
+          chunks.slice(index, index + concurrency).map((chunk) => cacheStore.readCsvRowChunk(chunk.path))
+        );
+
+        for (const rowChunk of rowChunks) {
+          if (!rowChunk) {
+            continue;
+          }
+          if (pushMatchingRows(results, dataset, file, rowChunk.rows, args, limit)) {
+            break;
+          }
         }
-        if (pushMatchingRows(results, dataset, file, rowChunk.rows, args, limit)) {
+
+        if (results.length >= limit) {
           break;
         }
       }
