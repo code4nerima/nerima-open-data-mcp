@@ -103,6 +103,23 @@
 - `sortOrder?: "asc" | "desc"`
 - `limit?: number`
 
+### `get_open_data_rows`
+
+練馬区オープンデータの指定データセットからCSV行をページング取得します。`search_open_data` は本文検索用ですが、このtoolは「世帯と人口（総括表）」の過去月分、人口推移、統計時系列、文化財一覧など、検索語に依存せずデータセット全体を分析したい質問に向いています。
+
+引数:
+
+- `dataset: string`
+- `fileTitle?: string`
+- `fileIndex?: number`
+- `offset?: number`
+- `limit?: number`
+
+例:
+
+- `get_open_data_rows(dataset="世帯と人口（総括表）", limit=1000)`
+- `nextOffset` が返った場合は `offset` に指定して続きの行を取得します。
+
 ### `search_news`
 
 練馬区公式サイトの新着情報RSSを検索します。

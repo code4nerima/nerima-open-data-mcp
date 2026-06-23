@@ -23,7 +23,42 @@ export interface OpenDataDataSetSearchArgs {
   limit?: number;
 }
 
+export interface OpenDataRowsArgs {
+  dataset: string;
+  fileTitle?: string;
+  fileIndex?: number;
+  offset?: number;
+  limit?: number;
+}
+
+export interface OpenDataRowItem {
+  datasetId: string;
+  datasetTitle: string;
+  category: string;
+  sourceUrl: string;
+  fileIndex: number;
+  fileTitle: string;
+  fileUrl: string;
+  rowIndex: number;
+  row: Record<string, string>;
+}
+
+export interface OpenDataRowsResult extends Record<string, unknown> {
+  dataset: OpenDataDataSetSummary | null;
+  pagination: {
+    offset: number;
+    limit: number;
+    returned: number;
+    totalRows: number;
+    nextOffset: number | null;
+  };
+  count: number;
+  results: OpenDataRowItem[];
+}
+
 const DEFAULT_CHUNK_READ_CONCURRENCY = 4;
+const DEFAULT_ROW_LIMIT = 100;
+const MAX_ROW_LIMIT = 1000;
 
 function chunkReadConcurrency(): number {
   const value = Number(process.env.SEARCH_CHUNK_READ_CONCURRENCY);
@@ -40,6 +75,22 @@ function toDataSetSummary(dataset: OpenDataCacheManifest["datasets"][number]): O
     csvFileCount: dataset.csvFileCount,
     rowCount: dataset.rowCount
   };
+}
+
+function normalizeRowsLimit(limit: unknown): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) {
+    return DEFAULT_ROW_LIMIT;
+  }
+
+  return Math.min(Math.max(Math.trunc(limit), 0), MAX_ROW_LIMIT);
+}
+
+function normalizeOffset(offset: unknown): number {
+  if (typeof offset !== "number" || !Number.isFinite(offset)) {
+    return 0;
+  }
+
+  return Math.max(Math.trunc(offset), 0);
 }
 
 function rowValues(row: Record<string, string>): string[] {
@@ -187,6 +238,140 @@ export async function searchOpenDataFromStore(
   }
 
   return {
+    count: results.length,
+    results
+  };
+}
+
+function findDataSetTarget(
+  manifest: OpenDataCacheManifest,
+  query: string
+): OpenDataCacheManifest["datasets"][number] | null {
+  const exact = manifest.datasets.find((dataset) => dataset.id === query || dataset.title === query || dataset.path === query);
+  if (exact) {
+    return exact;
+  }
+
+  return manifest.datasets.find((dataset) => anyFieldIncludes([dataset.id, dataset.title, dataset.path], query)) ?? null;
+}
+
+function addRowsFromBatch(
+  results: OpenDataRowItem[],
+  dataset: CachedDataSet,
+  file: CachedDataSet["files"][number],
+  fileIndex: number,
+  rows: Record<string, string>[],
+  state: { seen: number; offset: number; limit: number }
+): void {
+  for (const row of rows) {
+    const rowIndex = state.seen;
+    state.seen += 1;
+
+    if (rowIndex < state.offset) {
+      continue;
+    }
+
+    if (results.length >= state.limit) {
+      continue;
+    }
+
+    results.push({
+      datasetId: dataset.id,
+      datasetTitle: dataset.title,
+      category: dataset.category,
+      sourceUrl: dataset.pageUrl,
+      fileIndex,
+      fileTitle: file.title,
+      fileUrl: file.url,
+      rowIndex,
+      row
+    });
+  }
+}
+
+export async function getOpenDataRowsFromStore(
+  cacheStore: CacheStore,
+  manifest: OpenDataCacheManifest | null,
+  args: OpenDataRowsArgs
+): Promise<OpenDataRowsResult> {
+  const offset = normalizeOffset(args.offset);
+  const limit = normalizeRowsLimit(args.limit);
+  const empty = {
+    dataset: null,
+    pagination: { offset, limit, returned: 0, totalRows: 0, nextOffset: null },
+    count: 0,
+    results: []
+  };
+
+  if (!manifest) {
+    return empty;
+  }
+
+  const target = findDataSetTarget(manifest, args.dataset);
+  if (!target) {
+    return empty;
+  }
+
+  const dataset = await cacheStore.readDataSet(target.path);
+  if (!dataset) {
+    return {
+      ...empty,
+      dataset: toDataSetSummary(target),
+      pagination: { ...empty.pagination, totalRows: target.rowCount }
+    };
+  }
+
+  const selectedFiles = dataset.files
+    .map((file, index) => ({ file, index }))
+    .filter(({ file, index }) => {
+      if (typeof args.fileIndex === "number" && args.fileIndex !== index + 1) {
+        return false;
+      }
+      return anyFieldIncludes([file.title, file.url], args.fileTitle);
+    });
+  const totalRows = selectedFiles.reduce((sum, { file }) => sum + file.rowCount, 0);
+  const results: OpenDataRowItem[] = [];
+  const state = { seen: 0, offset, limit };
+
+  for (const { file, index } of selectedFiles) {
+    if (results.length >= limit) {
+      break;
+    }
+
+    if (file.rows) {
+      addRowsFromBatch(results, dataset, file, index + 1, file.rows, state);
+      continue;
+    }
+
+    for (const chunk of file.chunks ?? []) {
+      if (results.length >= limit) {
+        break;
+      }
+      if (state.seen + chunk.rowCount <= offset) {
+        state.seen += chunk.rowCount;
+        continue;
+      }
+
+      const rowChunk = await cacheStore.readCsvRowChunk(chunk.path);
+      if (!rowChunk) {
+        state.seen += chunk.rowCount;
+        continue;
+      }
+      addRowsFromBatch(results, dataset, file, index + 1, rowChunk.rows, state);
+    }
+  }
+
+  const nextOffset = offset + results.length < totalRows ? offset + results.length : null;
+
+  return {
+    dataset: toDataSetSummary(target),
+    pagination: {
+      offset,
+      limit,
+      returned: results.length,
+      totalRows,
+      nextOffset
+    },
     count: results.length,
     results
   };

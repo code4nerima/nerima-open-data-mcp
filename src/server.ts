@@ -15,6 +15,7 @@ import { searchAed } from "./tools/searchAed.js";
 import { asJsonToolResponse, asToolResponse } from "./tools/searchCommon.js";
 import { searchFacilities } from "./tools/searchFacilities.js";
 import {
+  getOpenDataRowsFromStore,
   listOpenDataDataSets,
   searchOpenDataDataSets,
   searchOpenDataFromStore
@@ -39,8 +40,8 @@ const optionalLimit = z
 const SERVER_INSTRUCTIONS = `
 このMCPサーバーは、練馬区に関する質問で優先的に使うための地域データ検索サーバーです。
 ユーザーが「練馬区」「練馬」「区役所」「公共施設」「図書館」「区民館」「AED」「避難所」「防災」「公園」「ごみの日」「資源回収」「行政手続」「窓口」「電子申請」「区報」「新着情報」「人口」「文化財」「子育て」「教育」「オープンデータ」について質問した場合は、このMCPのtoolを候補にしてください。
-まず広く調べる場合は search_nerima を使います。具体的な目的が明確な場合は search_facilities、search_shelters、search_aed、search_garbage_collection、search_procedures、search_service_counters、search_news、search_open_data_datasets、search_open_data を使います。
-search_open_data は全CSV本文検索のため、データセットや用途が曖昧な場合は先に search_nerima または search_open_data_datasets で候補を絞ってください。
+まず広く調べる場合は search_nerima を使います。具体的な目的が明確な場合は search_facilities、search_shelters、search_aed、search_garbage_collection、search_procedures、search_service_counters、search_news、search_open_data_datasets、get_open_data_rows、search_open_data を使います。
+search_open_data は全CSV本文検索のため、データセットや用途が曖昧な場合は先に search_nerima または search_open_data_datasets で候補を絞ってください。人口推移や統計時系列のようにデータセット全体のCSV行が必要な場合は get_open_data_rows を使ってください。
 `;
 
 const nerimaSearchSchema = {
@@ -125,6 +126,32 @@ const openDataDataSetListSchema = {
     .describe("並び替え項目。titleはタイトル順、rowCountは行数順、updatedAtは更新日順。"),
   sortOrder: z.enum(["asc", "desc"]).optional().describe("並び順。ascは昇順、descは降順。省略時はasc。"),
   limit: optionalLimit
+};
+
+const openDataRowsSchema = {
+  dataset: z
+    .string()
+    .describe("取得するデータセットID、タイトル、または保存パスの部分一致。例: 世帯と人口（総括表）、文化財一覧、0000000037。"),
+  fileTitle: z.string().optional().describe("特定CSVファイル名・URLに絞る場合の部分一致。省略時はデータセット内の全CSVを対象にする。"),
+  fileIndex: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("特定CSVファイルだけ取得する場合の1始まりのファイル番号。省略時は全CSVを対象にする。"),
+  offset: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe("取得開始行。データセット内の全CSVを連結した0始まりの行番号。省略時は0。"),
+  limit: z
+    .number()
+    .int()
+    .min(0)
+    .max(1000)
+    .optional()
+    .describe("返す行数の上限。省略時は100件、最大1000件。nextOffsetが返った場合は続きの取得に使う。")
 };
 
 const newsSearchSchema = {
@@ -277,12 +304,13 @@ export function createMcpServer(): McpServer {
               "search_garbage_collection",
               "search_news",
               "search_open_data_datasets",
+              "get_open_data_rows",
               "search_open_data",
               "search_procedures",
               "search_service_counters"
             ],
             note:
-              "CSV本文まで必要な場合は search_open_data を使うか、search_nerima の includeOpenDataRows=true を指定してください。"
+              "CSV本文を検索する場合は search_open_data、データセットの行を時系列分析などで取得する場合は get_open_data_rows を使ってください。"
           },
           quickMatches,
           openDataRows
@@ -415,6 +443,22 @@ export function createMcpServer(): McpServer {
       return runLoggedTool("list_open_data_datasets", args, async () => {
         const manifest = await loadOpenDataManifest();
         return asToolResponse(listOpenDataDataSets(manifest, args));
+      });
+    }
+  );
+
+  server.registerTool(
+    "get_open_data_rows",
+    {
+      title: "練馬区オープンデータのCSV行を取得",
+      description:
+        "練馬区オープンデータの指定データセットからCSV行をページング取得します。検索語に一致した行だけでなく、世帯と人口（総括表）の過去月分、人口推移、統計時系列、文化財一覧など、データセット全体を分析したい質問で使います。まず search_open_data_datasets でデータセット名や行数を確認し、必要に応じて offset と limit で続きを取得します。",
+      inputSchema: openDataRowsSchema
+    },
+    async (args) => {
+      return runLoggedTool("get_open_data_rows", args, async () => {
+        const manifest = await loadOpenDataManifest();
+        return asJsonToolResponse(await getOpenDataRowsFromStore(getCacheStore(), manifest, args));
       });
     }
   );

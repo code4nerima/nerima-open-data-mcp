@@ -10,7 +10,7 @@ import type { GarbageCollectionArea, RssNewsItem } from "../types/openData.js";
 import { searchFacilities } from "./searchFacilities.js";
 import { searchGarbageCollection } from "./searchGarbageCollection.js";
 import { searchNews } from "./searchNews.js";
-import { searchOpenDataDataSets, searchOpenDataFromStore } from "./searchOpenData.js";
+import { getOpenDataRowsFromStore, searchOpenDataDataSets, searchOpenDataFromStore } from "./searchOpenData.js";
 import { searchProcedures } from "./searchProcedures.js";
 import { searchServiceCounters } from "./searchServiceCounters.js";
 
@@ -209,6 +209,93 @@ describe("searchOpenDataFromStore", () => {
       datasetTitle: "文化財一覧",
       row: { 名称: "石神井城跡" }
     });
+  });
+});
+
+describe("getOpenDataRowsFromStore", () => {
+  it("returns paginated rows stored in chunks", async () => {
+    const manifest = {
+      generatedAt: "2026-06-22T00:00:00.000Z",
+      sourceCatalogUrl: "https://example.com/catalog.csv",
+      datasetCount: 1,
+      csvFileCount: 2,
+      totalRowCount: 4,
+      datasets: [
+        {
+          id: "0000000100",
+          title: "世帯と人口（総括表）",
+          category: "統計・区政情報",
+          updatedAt: "2026-06-01",
+          pageUrl: "https://example.com/population.html",
+          path: "datasets/population.json",
+          csvFileCount: 2,
+          rowCount: 4
+        }
+      ]
+    };
+    const cacheStore = {
+      async readDataSet() {
+        return {
+          id: "0000000100",
+          title: "世帯と人口（総括表）",
+          summary: "人口統計",
+          keywords: "人口,世帯",
+          category: "統計・区政情報",
+          pageUrl: "https://example.com/population.html",
+          updatedAt: "2026-06-01",
+          license: "CC-BY",
+          fetchedAt: "2026-06-22T00:00:00.000Z",
+          files: [
+            {
+              title: "2026年5月",
+              url: "https://example.com/202605.csv",
+              chunks: [{ path: "dataset-files/0000000100/001/00001.json", rowCount: 2 }],
+              rowCount: 2
+            },
+            {
+              title: "2026年6月",
+              url: "https://example.com/202606.csv",
+              chunks: [{ path: "dataset-files/0000000100/002/00001.json", rowCount: 2 }],
+              rowCount: 2
+            }
+          ]
+        };
+      },
+      async readCsvRowChunk(path: string) {
+        const rowsByPath: Record<string, Record<string, string>[]> = {
+          "dataset-files/0000000100/001/00001.json": [
+            { 区分: "総数", 人口: "740000" },
+            { 区分: "男", 人口: "360000" }
+          ],
+          "dataset-files/0000000100/002/00001.json": [
+            { 区分: "総数", 人口: "741000" },
+            { 区分: "男", 人口: "361000" }
+          ]
+        };
+        return {
+          rowCount: rowsByPath[path]?.length ?? 0,
+          rows: rowsByPath[path] ?? []
+        };
+      }
+    };
+
+    const result = await getOpenDataRowsFromStore(cacheStore as never, manifest, {
+      dataset: "人口",
+      offset: 1,
+      limit: 2
+    });
+
+    expect(result.pagination).toEqual({
+      offset: 1,
+      limit: 2,
+      returned: 2,
+      totalRows: 4,
+      nextOffset: 3
+    });
+    expect(result.results.map((item) => [item.fileTitle, item.rowIndex, item.row.人口])).toEqual([
+      ["2026年5月", 1, "360000"],
+      ["2026年6月", 2, "741000"]
+    ]);
   });
 });
 
